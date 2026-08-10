@@ -28,7 +28,7 @@ function Write-Log([string]$msg) {
 }
 
 # 1) Indexer tous les changements
-git add -A *> $null
+git add -A 2>$null
 $status = git status --porcelain
 if (-not $status) {
     'Rien à synchroniser (dépôt à jour).'
@@ -48,7 +48,7 @@ $patterns = @(
     '-----BEGIN [A-Z ]*PRIVATE KEY-----',
     '(password|passwd|client_secret|api[_-]?key|access[_-]?token)\s*[=:]\s*[''][^'']{8,}['']'
 )
-$staged = git diff --cached
+$staged = git diff --cached 2>$null
 $bad = $staged | Select-String -Pattern $patterns
 if ($bad) {
     Write-Log 'ABORT : motif sensible détecté dans les changements en attente — rien n a ete pousse.'
@@ -63,7 +63,12 @@ if ($bad) {
 
 # 3) Commit + push
 $msg = 'sync: mise à jour automatique (' + (Get-Date -Format 'yyyy-MM-dd HH:mm') + ')'
-git commit -m $msg *> $null
-git push origin master:main 2>&1 | Out-String | ForEach-Object { Write-Log $_ }
+git commit -m $msg 2>&1 | Out-Null
+$pushOut = git push origin master:main 2>&1
+$pushOut | Out-String | ForEach-Object { Write-Log $_ }
+if ($LASTEXITCODE -ne 0) {
+    Write-Output "ECHEC du push (code $LASTEXITCODE). Détails : $errLog"
+    exit 1
+}
 Write-Output ('OK : synchronisé le ' + (Get-Date -Format 'yyyy-MM-dd HH:mm'))
 exit 0
