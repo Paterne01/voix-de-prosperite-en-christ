@@ -10,8 +10,9 @@ travaillant sur ce dépôt.
 - Une tâche planifiée Windows `VoixDeProsperite_SyncGitHub` exécute
   `scripts/sync-github.ps1` toutes les 5 minutes : elle indexe, commite
   (`sync: mise à jour automatique (date)`) et pousse tout changement.
-  Elle tourne **en arrière-plan, sans fenêtre** (action `wscript.exe` →
-  `scripts/run-hidden.vbs`).
+  Elle tourne **en arrière-plan, sans fenêtre** : action `wscript.exe` → un
+  launcher `.vbs` dédié généré dans `scripts/launchers/` (jamais de
+  `powershell.exe` nu en action de tâche).
 - Chaque agent DOIT en plus pousser immédiatement après chaque commit de
   session : `git push origin master:main`.
 - Garde-fou : `scripts/sync-github.ps1` refuse de pousser un motif de secret
@@ -24,7 +25,9 @@ Les fenêtres de terminal qui s'ouvrent pour exécuter des tâches planifiées
 doivent rester invisibles en permanence.
 
 - Toute tâche planifiée Windows créée sur ce PC doit être silencieuse : action
-  `wscript.exe` (processus sans console) appelant `scripts/run-hidden.vbs "commande"`.
+  `wscript.exe` (processus sans console) exécutant un launcher `.vbs` dédié
+  (généré par l'assistant ci-dessous ; commande en dur dans le VBS, aucune
+  imbrication de guillemets).
 - Pour créer une tâche silencieuse : `powershell -File scripts\register-background-task.ps1
   -TaskName "<Nom>" -ScriptPath "<chemin absolu>" -RepeatMinutes N`.
 - Lancement ponctuel masqué : `wscript scripts\run-hidden.vbs "commande"`.

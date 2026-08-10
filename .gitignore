@@ -41,6 +41,9 @@ Sauvegardes/
 .codex/
 .agents/
 work/
+# Launchers VBS générés par register-background-task.ps1
+# (chemins machine locaux — régénérés automatiquement, ne pas versionner).
+scripts/launchers/
 
 # ── Système ──────────────────────────────────────────────
 .DS_Store
