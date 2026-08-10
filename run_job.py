@@ -4,24 +4,8 @@ import argparse
 import sys
 from datetime import datetime
 
+from src.jobs import matching_formats, run_slot
 from src.scheduler_log import log_run
-
-
-def _matching_formats(database, slot: str | None, forced_output: str | None) -> list[dict]:
-    """Renvoie les formats actifs de la BD correspondant au créneau (ou au type forcé).
-
-    Retourne [] si aucun format actif ne matche ; dans ce cas l'appelant
-    retombe sur l'ancien mappage config['schedule'] pour ne rien casser.
-    """
-    formats = database.list_formats(only_active=True)
-    if not formats:
-        return []
-    if forced_output:
-        output_types = {"video": "short_comment", "declaration": "image_text"}
-        return [fmt for fmt in formats if fmt["output_type"] == output_types[forced_output]]
-    if slot is None:
-        return formats
-    return [fmt for fmt in formats if slot in fmt["schedule"]]
 
 
 @log_run("run_job")
@@ -52,67 +36,40 @@ def _run() -> None:
     database.seed_default_formats(config["schedule"])
 
     if args.manual:
-        from src.manual_scheduler import run_manual
+        from src.jobs import run_manual_tick
 
-        result = run_manual(config, service, setup_logging(config), dry_run=args.dry_run)
+        result = run_manual_tick(config, service, setup_logging(config), dry_run=args.dry_run)
         print(result)
         return
 
-    def run_one(fmt: dict | None, slot: str | None, scheduled_for: str) -> dict:
-        if fmt is None:
-            output_type = args.format or format_for(config, slot)
-            return service.publish(
-                scheduled_for=scheduled_for,
-                dry_run=args.dry_run,
-                format=output_type,
-            )
-        return service.publish(
-            scheduled_for=scheduled_for,
-            dry_run=args.dry_run,
-            format=service.normalize_format(fmt["output_type"]),
-            prompt=fmt["prompt"] or None,
-            networks=fmt["networks"],
-            format_name=fmt["name"],
-        )
-
     if args.catch_up:
-        # Filet de sécurité : purge les médias de plus de 2 jours au cas où le
-        # nettoyage normal aurait été sauté (crash, échec partiel, ...).
-        from src.cleanup import purge_old_media
-        from src.config import absolute_path
+        from src.jobs import run_catch_up
 
-        logger = setup_logging(config)
-        for folder in ("images", "videos"):
-            purge_old_media(absolute_path(config["paths"][folder]), keep_days=2, logger=logger)
-        now = datetime.now()
-        due = [slot for slot in config["schedule"] if slot <= now.strftime("%H:%M") and service.database.needs_catch_up(slot)]
-        if not due:
-            print("Aucune publication en retard.")
-            return
-        for slot in due:
-            for fmt in _matching_formats(database, slot, args.format) or [None]:
-                label = fmt["name"] if fmt else (args.format or format_for(config, slot))
-                print(f"[{slot}] {label}: " + str(
-                    run_one(fmt, slot, f"{now.date().isoformat()}T{slot}")
-                ))
-    else:
-        now = datetime.now()
-        current = now.strftime("%H:%M")
-        # Collage sur le dernier créneau planifié ≤ maintenant : identique au
-        # comportement historique quand on lance manuellement entre deux créneaux.
-        slot = max(
-            (s for s in config["schedule"] if s <= current),
-            default=current,
-        )
-        targets = _matching_formats(database, slot, args.format) or [None]
-        if not targets:
-            print("Aucun format actif pour ce créneau, rien à publier.")
-            return
-        for fmt in targets:
-            label = fmt["name"] if fmt else (args.format or format_for(config, slot))
-            print(f"[{slot}] {label}: " + str(
-                run_one(fmt, slot, now.isoformat(timespec="minutes"))
-            ))
+        result = run_catch_up(config, service, dry_run=args.dry_run, forced_output=args.format)
+        print(result)
+        return
+    now = datetime.now()
+    current = now.strftime("%H:%M")
+    # Collage sur le dernier créneau planifié ≤ maintenant : identique au
+    # comportement historique quand on lance manuellement entre deux créneaux.
+    slot = max(
+        (s for s in config["schedule"] if s <= current),
+        default=current,
+    )
+    targets = matching_formats(database, slot, args.format) or [None]
+    if not targets:
+        print("Aucun format actif pour ce créneau, rien à publier.")
+        return
+    for fmt in targets:
+        label = fmt["name"] if fmt else (args.format or format_for(config, slot))
+        # Garde-fou anti-doublon : un contenu existe déjà pour ce créneau (le
+        # serveur APScheduler ou une autre instance l'a peut-être publié).
+        if not args.dry_run and not database.needs_catch_up(slot):
+            print(f"[{slot}] {label}: déjà publié, skip (anti-doublon).")
+            continue
+        print(f"[{slot}] {label}: " + str(
+            run_slot(config, service, fmt, slot, f"{now.date().isoformat()}T{slot}", dry_run=args.dry_run)
+        ))
 
 
 def main() -> None:

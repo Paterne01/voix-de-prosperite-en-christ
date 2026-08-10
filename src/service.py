@@ -111,12 +111,24 @@ class PublicationService:
 
     # ── publish ──────────────────────────────────────────────────────
 
+    @staticmethod
+    def is_pro_user() -> bool:
+        """Version gratuite pour l'instant : aucun compte pro n'existe encore."""
+        return True
+
     def publish(
         self, *, mode: str | None = None, scheduled_for: str | None = None,
         dry_run: bool = False, format: str = "video", prompt: str | None = None,
         networks: list[str] | None = None, format_name: str | None = None,
+        tier: str = "free",
     ) -> dict:
         self._dry_run = dry_run
+        if tier == "pro" and not self.is_pro_user():
+            self.logger.info("Format pro ignoré — version gratuite (%s)", format_name)
+            return {
+                "id": None, "status": "skipped", "reason": "pro",
+                "format": format, "format_name": format_name,
+            }
         allowed = set(networks) if networks else None
         started = datetime.now(UTC)
         prepared = self.prepare(mode, format=format, prompt=prompt)
@@ -393,6 +405,8 @@ class PublicationService:
         self, *, media_path: str | Path, caption: str, comment: str = "",
         scheduled_for: str | None = None, dry_run: bool = False,
         networks: list[str] | None = None, filename: str | None = None,
+        publication_id: int | None = None, format: str = "manual",
+        format_name: str = "Manuel", consume_source: bool = True,
     ) -> dict:
         from .manual import kind_of
 
@@ -425,13 +439,22 @@ class PublicationService:
                 return {"title": self.title, "caption": self.caption, "comment_text": self.comment_text, "hashtags": self.hashtags}
 
         content = _ManualContent()
-        publication_id = self.database.create(
-            self._record_base(
-                content, media if kind == "image" else None, scheduled_for, started,
-                format="manual", format_name="Manuel",
+        if publication_id is None:
+            publication_id = self.database.create(
+                self._record_base(
+                    content, media if kind == "image" else None, scheduled_for, started,
+                    format=format, format_name=format_name,
+                )
             )
-        )
-        self.database.update(publication_id, source_filename=filename or media.name)
+            self.database.update(publication_id, source_filename=filename or media.name)
+        else:
+            # Reprise d'une publication existante (panneau de contrôle) : on
+            # réutilise son identifiant et on conserve son contenu.
+            self.database.update(
+                publication_id, status="in_progress", error=None,
+                format=format, format_name=format_name,
+                image_path=str(media) if kind == "image" else None,
+            )
 
         if dry_run:
             return {
@@ -483,12 +506,45 @@ class PublicationService:
 
         if networks_out and all(v.get("status") == "ok" for v in networks_out.values()):
             self._purge(created_media)
-            try:
-                media.unlink()  # le fichier source en attente est consommé
-            except OSError as exc:
-                self.logger.warning("Impossible de supprimer le fichier source %s : %s", media, exc)
+            if consume_source:
+                try:
+                    media.unlink()  # le fichier source en attente est consommé
+                except OSError as exc:
+                    self.logger.warning("Impossible de supprimer le fichier source %s : %s", media, exc)
 
         return {"id": publication_id, "status": overall, "format": "manual", **networks_out}
+
+    # ── reprise / annulation (tableau de bord) ──────────────────────
+
+    def resume(
+        self, *, publication_id: int, image_path: str | None = None,
+        networks: list[str] | None = None, dry_run: bool = False,
+    ) -> dict:
+        """Reprend une publication en attente avec son contenu stocké, en
+        réutilisant son identifiant. `image_path` (fichier uploadé) remplace
+        l'image manquante si le statut était `awaiting_image`."""
+        record = self.database.get(publication_id)
+        if record is None:
+            raise ValueError("Publication introuvable.")
+        if record["status"] == "cancelled":
+            raise ValueError("Publication annulée : impossible de reprendre.")
+        media = Path(image_path) if image_path else None
+        if media is None and record.get("image_path"):
+            media = Path(record["image_path"])
+        if media is None or not media.exists():
+            raise ValueError("Aucune image disponible : fournissez une image pour reprendre.")
+        return self.publish_manual(
+            media_path=media,
+            caption=record["caption"] or "",
+            comment=record["comment_text"] or "",
+            scheduled_for=record["scheduled_for"],
+            dry_run=dry_run,
+            networks=networks,
+            publication_id=publication_id,
+            format=record.get("format") or "manual",
+            format_name=record.get("format_name") or "Reprise",
+            consume_source=False,
+        )
 
     # ── status ──────────────────────────────────────────────────────
 

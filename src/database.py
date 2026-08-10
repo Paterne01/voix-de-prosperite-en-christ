@@ -58,9 +58,14 @@ class HistoryDatabase:
                     output_type TEXT NOT NULL,
                     networks TEXT NOT NULL,
                     active INTEGER NOT NULL DEFAULT 1,
+                    tier TEXT NOT NULL DEFAULT 'free',
                     created_at TEXT NOT NULL
                 )
             """)
+            try:
+                conn.execute("ALTER TABLE post_formats ADD COLUMN tier TEXT NOT NULL DEFAULT 'free'")
+            except sqlite3.OperationalError:
+                pass
             for col in (
                 "youtube_video_id", "youtube_url", "youtube_comment_id", "youtube_comment_url",
                 "tiktok_publish_id", "tiktok_url",
@@ -137,6 +142,25 @@ class HistoryDatabase:
             rows = conn.execute("SELECT * FROM publications ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [dict(row) for row in rows]
 
+    def get(self, publication_id: int) -> dict | None:
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM publications WHERE id = ?", (publication_id,)).fetchone()
+        return dict(row) if row else None
+
+    def pending(self, statuses: tuple[str, ...] = ("awaiting_image", "failed", "prepared", "skipped")) -> list[dict]:
+        """Publications en attente d'une action (image manquante, échec, brouillon)."""
+        marks = ",".join("?" for _ in statuses)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM publications WHERE status IN ({marks}) ORDER BY id DESC",
+                statuses,
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def cancel(self, publication_id: int) -> None:
+        """Annule une publication en attente (elle disparaît du panneau de contrôle)."""
+        self.update(publication_id, status="cancelled", error="Annulée depuis le tableau de bord")
+
     def needs_catch_up(self, schedule_time: str) -> bool:
         today = datetime.now().date().isoformat()
         with self.connect() as conn:
@@ -188,35 +212,38 @@ class HistoryDatabase:
             row = conn.execute("SELECT * FROM post_formats WHERE id = ?", (format_id,)).fetchone()
         return dict(row) if row else None
 
-    def create_format(self, name: str, prompt: str, schedule: list[str], output_type: str, networks: list[str], active: bool = True) -> int:
+    def create_format(self, name: str, prompt: str, schedule: list[str], output_type: str, networks: list[str], active: bool = True, tier: str = "free") -> int:
         import json
         from datetime import datetime
         with self.connect() as conn:
             cursor = conn.execute(
-                "INSERT INTO post_formats (name, prompt, schedule, output_type, networks, active, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO post_formats (name, prompt, schedule, output_type, networks, active, tier, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     name, prompt,
                     json.dumps(schedule, ensure_ascii=False),
                     output_type,
                     json.dumps(networks, ensure_ascii=False),
                     1 if active else 0,
+                    tier or "free",
                     datetime.now(UTC).isoformat(),
                 ),
             )
             return int(cursor.lastrowid)
 
-    def update_format(self, format_id: int, *, name: str, prompt: str, schedule: list[str], output_type: str, networks: list[str], active: bool) -> None:
+    def update_format(self, format_id: int, *, name: str, prompt: str, schedule: list[str], output_type: str, networks: list[str], active: bool, tier: str | None = None) -> None:
         import json
+        tier = tier or "free"
         with self.connect() as conn:
             conn.execute(
-                "UPDATE post_formats SET name = ?, prompt = ?, schedule = ?, output_type = ?, networks = ?, active = ? WHERE id = ?",
+                "UPDATE post_formats SET name = ?, prompt = ?, schedule = ?, output_type = ?, networks = ?, active = ?, tier = ? WHERE id = ?",
                 (
                     name, prompt,
                     json.dumps(schedule, ensure_ascii=False),
                     output_type,
                     json.dumps(networks, ensure_ascii=False),
                     1 if active else 0,
+                    tier,
                     format_id,
                 ),
             )

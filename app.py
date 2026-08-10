@@ -9,6 +9,7 @@ from flask import Flask, jsonify, redirect, render_template, request
 from src.config import ROOT, absolute_path, load_config, save_config
 from src.logging_setup import setup_logging
 from src.publishers.tiktok import TikTokOAuth, persist_token
+from src.scheduler import PostScheduler
 from src.secrets import get_secret, secret_status, set_secret
 from src.service import PublicationService
 
@@ -16,6 +17,8 @@ app = Flask(__name__)
 
 _YT_TOKEN_PATH = ROOT / "BaseDeDonnées" / "youtube_token.pickle"
 _OAUTH = TikTokOAuth()
+
+_scheduler_instance: PostScheduler | None = None
 
 
 def _redirect_uri() -> str:
@@ -25,6 +28,15 @@ def _redirect_uri() -> str:
 def service() -> PublicationService:
     config = load_config()
     return PublicationService(config, setup_logging(config))
+
+
+def get_scheduler() -> PostScheduler:
+    global _scheduler_instance
+    if _scheduler_instance is None:
+        config = load_config()
+        _scheduler_instance = PostScheduler(config, setup_logging(config))
+        _scheduler_instance.start(config)
+    return _scheduler_instance
 
 
 @app.get("/")
@@ -78,6 +90,7 @@ def create_format():
         return jsonify(ok=False, error="Au moins un horaire HH:MM requis."), 400
     db = service().database
     format_id = db.create_format(name, prompt, schedule, output_type, networks or ["facebook", "youtube", "tiktok"])
+    get_scheduler().sync(load_config())
     return jsonify(ok=True, id=format_id)
 
 
@@ -98,6 +111,7 @@ def update_format(format_id: int):
         return jsonify(ok=False, error="Au moins un horaire HH:MM requis."), 400
     db.update_format(format_id, name=name, prompt=prompt, schedule=schedule,
                      output_type=output_type, networks=networks, active=active)
+    get_scheduler().sync(load_config())
     return jsonify(ok=True)
 
 
@@ -107,6 +121,7 @@ def delete_format(format_id: int):
     if not db.get_format(format_id):
         return jsonify(ok=False, error="Format introuvable."), 404
     db.delete_format(format_id)
+    get_scheduler().sync(load_config())
     return jsonify(ok=True)
 
 
@@ -258,6 +273,7 @@ def save_settings():
     config["publishers"].setdefault("tiktok", {"enabled": False, "audited": False})
     config["publishers"]["tiktok"]["enabled"] = request.form.get("publisher_tiktok") == "on"
     save_config(config)
+    get_scheduler().sync(config)
     return jsonify(ok=True)
 
 
@@ -296,30 +312,88 @@ def logs():
     return jsonify(text=text)
 
 
+# ── Planification (APScheduler) ─────────────────────────────────────
+
+@app.get("/api/scheduler")
+def scheduler_status():
+    config = load_config()
+    return jsonify(
+        running=get_scheduler().scheduler.running,
+        timezone=config.get("timezone", "Africa/Nairobi"),
+        jobs=get_scheduler().scheduled_jobs(),
+    )
+
+
+@app.post("/api/scheduler/sync")
+def scheduler_sync():
+    get_scheduler().sync(load_config())
+    return jsonify(ok=True, jobs=get_scheduler().scheduled_jobs())
+
+
+@app.post("/api/catch-up")
+def catch_up():
+    from src.jobs import run_catch_up
+
+    config = load_config()
+    dry_run = request.form.get("dry_run") == "on"
+    try:
+        result = run_catch_up(config, service(), dry_run=dry_run)
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)), 502
+    return jsonify(result)
+
+
+# ── Panneau de contrôle : reprise / annulation ──────────────────────
+
+@app.get("/api/pending")
+def pending_list():
+    return jsonify(publications=service().database.pending())
+
+
+@app.post("/api/publications/<int:publication_id>/resume")
+def resume_publication(publication_id: int):
+    from src.manual import kind_of
+
+    config = load_config()
+    file = request.files.get("file")
+    image_path = None
+    if file and file.filename:
+        if kind_of(file.filename) != "image":
+            return jsonify(ok=False, error="Seule une image est acceptée (JPG, PNG, WEBP)."), 400
+        safe_name = Path(file.filename).name
+        target = absolute_path(config["paths"].get("images", "Images")) / f"resume_{publication_id}_{safe_name}"
+        file.save(target)
+        image_path = str(target)
+    networks = _parse_networks(request.form.get("networks", ""))
+    dry_run = request.form.get("dry_run") == "on"
+    try:
+        result = service().resume(
+            publication_id=publication_id, image_path=image_path,
+            networks=networks or None, dry_run=dry_run,
+        )
+    except ValueError as exc:
+        return jsonify(ok=False, error=str(exc)), 400
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)), 502
+    return jsonify(result)
+
+
+@app.post("/api/publications/<int:publication_id>/cancel")
+def cancel_publication(publication_id: int):
+    db = service().database
+    if not db.get(publication_id):
+        return jsonify(ok=False, error="Publication introuvable."), 404
+    db.cancel(publication_id)
+    return jsonify(ok=True)
+
+
 if __name__ == "__main__":
     from src.scheduler_log import log_run
 
-    def _manual_loop() -> None:
-        import threading
-        import time as _time
-
-        def tick() -> None:
-            from src.manual_scheduler import run_manual
-
-            while True:
-                try:
-                    cfg = load_config()
-                    inst = PublicationService(cfg, setup_logging(cfg))
-                    run_manual(cfg, inst, setup_logging(cfg))
-                except Exception:
-                    logging.getLogger("voix").exception("Tour du planificateur manuel échoué")
-                _time.sleep(300)
-
-        threading.Thread(target=tick, daemon=True, name="manual-scheduler").start()
-
     @log_run("app.py (serveur Flask)")
     def _serve() -> None:
-        _manual_loop()
+        # Démarre APScheduler : créneaux des formats actifs + boucle manuelle.
+        get_scheduler()
         app.run(host="127.0.0.1", port=8765, debug=False, use_reloader=False)
 
     _serve()
