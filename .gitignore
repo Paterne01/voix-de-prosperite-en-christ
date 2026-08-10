@@ -26,6 +26,10 @@ Textes/
 Logs/
 outputs/
 assets/pending/
+# Médiathèque de marque (fonds/audio sous licence, volumineux) :
+# exclue du dépôt public — à fournir localement ou via git LFS.
+assets/format_a/
+assets/format_b/
 
 # ── Sauvegardes / archives ───────────────────────────────
 Sauvegardes/
