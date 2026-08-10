@@ -1,0 +1,46 @@
+# ── Python ───────────────────────────────────────────────
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.python-version
+
+# ── Configuration personnelle (ne jamais commiter) ────────
+config.json
+.env
+.env.local
+*.client_secret.json
+youtube_client_secret.json
+youtube_token.pickle
+*.pickle
+BaseDeDonnées/
+manual_review/
+
+# ── Médias générés / personnels ──────────────────────────
+Images/
+Videos/
+Vidéos/
+Textes/
+Logs/
+outputs/
+assets/pending/
+
+# ── Sauvegardes / archives ───────────────────────────────
+Sauvegardes/
+*.zip
+*.sqlite3
+*.log
+
+# ── Outils d'agent / scratch ─────────────────────────────
+.codex/
+.agents/
+work/
+
+# ── Système ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+stderr.txt
+stdout.txt

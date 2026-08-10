@@ -1,0 +1,70 @@
+{
+  "_doc": "Ceci est le fichier d'exemple. Copiez-le en config.json puis remplissez vos valeurs. Les clés inconnues (ex. _doc) sont ignorées par le programme.",
+  "page_id": "",
+  "timezone": "Africa/Nairobi",
+  "schedule": ["00:00", "08:00", "12:00", "16:00"],
+  "schedule_formats": {
+    "00:00": "declaration",
+    "08:00": "video",
+    "12:00": "declaration",
+    "16:00": "video"
+  },
+  "logo_path": "assets/logo.png",
+  "image_mode": "local",
+  "manual_schedule": {
+    "mode": "slots",
+    "slots": ["04:00", "20:00"],
+    "interval_hours": 4,
+    "start_hour": "00:00",
+    "networks": ["facebook", "youtube", "tiktok"]
+  },
+  "cloud_image": {
+    "provider": "huggingface",
+    "model": "black-forest-labs/FLUX.1-schnell",
+    "enabled": false
+  },
+  "publishers": {
+    "facebook": true,
+    "youtube": false,
+    "tiktok": {
+      "enabled": false,
+      "audited": false
+    }
+  },
+  "paths": {
+    "images": "Images",
+    "videos": "Videos",
+    "texts": "Textes",
+    "logs": "Logs",
+    "database": "BaseDeDonnées/voix_prosperite.sqlite3",
+    "manual_review": "manual_review",
+    "pending": "assets/pending",
+    "backgrounds": "assets/format_a/backgrounds",
+    "formats": {
+      "format_a": {
+        "backgrounds": "assets/format_a/backgrounds",
+        "audio": "assets/format_a/audio"
+      },
+      "format_b": {
+        "backgrounds": "assets/format_b/backgrounds",
+        "audio": "assets/format_b/audio"
+      }
+    }
+  },
+  "facebook": {
+    "api_version": "v25.0",
+    "max_retries": 3
+  },
+  "youtube": {
+    "privacy_status": "public",
+    "max_retries": 3
+  },
+  "tiktok": {
+    "privacy_level": "SELF_ONLY",
+    "is_aigc": true,
+    "chunk_size": 8388608,
+    "max_retries": 3,
+    "poll_interval_s": 5,
+    "poll_timeout_s": 900
+  }
+}
