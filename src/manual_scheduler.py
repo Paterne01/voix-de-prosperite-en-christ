@@ -3,6 +3,14 @@ from __future__ import annotations
 import time
 from datetime import datetime
 
+# Fenêtre autour de l'heure d'un créneau pendant laquelle il est « actif » :
+# quelques minutes AVANT (l'heure approche) et quelques minutes APRÈS (tolérance
+# de dérive du tick toutes les 5/10 minutes). Un créneau passé depuis longtemps
+# n'est JAMAIS rattrapé : les fichiers déposés en pleine journée attendent la
+# prochaine heure de publication dans assets/pending.
+SLOT_EARLY_MINUTES = 5
+SLOT_GRACE_MINUTES = 20
+
 
 def manual_slots(config: dict) -> list[str]:
     """Créneaux de publication du Format C (fichiers importés).
@@ -26,20 +34,41 @@ def manual_slots(config: dict) -> list[str]:
     return sorted(s for s in slots if len(s) == 5 and s[2] == ":")
 
 
-def due_slots(config: dict, database, now: datetime | None = None) -> list[str]:
-    """Créneaux manuels du jour déjà atteints et pas encore publiés (chronologique)."""
+def slot_due_now(config: dict, database, now: datetime | None = None) -> str | None:
+    """Renvoie le créneau manuel à publier MAINTENANT, ou None.
+
+    Un créneau n'est publié que si l'heure courante tombe dans la fenêtre qui
+    entoure son horaire (le créneau « approche » ou vient de sonner). Déposer
+    un fichier en pleine journée ne déclenche donc RIEN : le fichier attend la
+    prochaine heure de publication. Un créneau déjà publié est ignoré (anti-
+    doublon) et on passe au suivant.
+    """
     now = now or datetime.now()
     today = now.date().isoformat()
-    current = now.strftime("%H:%M")
-    return [
-        slot for slot in manual_slots(config)
-        if slot <= current and not database.manual_slot_done(today, slot)
-    ]
+    current_min = now.hour * 60 + now.minute
+    for slot in manual_slots(config):
+        try:
+            hour, minute = map(int, slot.split(":"))
+        except ValueError:
+            continue
+        slot_min = hour * 60 + minute
+        if slot_min - SLOT_EARLY_MINUTES <= current_min <= slot_min + SLOT_GRACE_MINUTES:
+            if not database.manual_slot_done(today, slot):
+                return slot
+    return None
 
 
 def run_manual(config: dict, service, logger, dry_run: bool = False) -> dict:
-    """Un tour du planificateur manuel : publie les fichiers en attente aux
-    créneaux dus. Ne fait RIEN si le dossier assets/pending est vide.
+    """Un tour du planificateur manuel : à l'heure d'un créneau, publie LE
+    fichier le plus ancien en attente, puis passe au suivant au créneau suivant.
+
+    - Les fichiers restent dans assets/pending tant que l'heure n'est pas venue.
+    - Un SEUL fichier (image ou vidéo) est traité par créneau, du plus ancien au
+      plus récent (date d'ajout = mtime du fichier).
+    - La légende est générée depuis le nom du fichier (Facebook) et sert de
+      description YouTube/TikTok ; YouTube reçoit aussi titre + tags (IA).
+    - Une fois la publication confirmée, le fichier et les résidus sont nettoyés.
+    - À l'heure du créneau sans aucun fichier disponible : rien ne se passe.
 
     Retourne un dict récapitulatif (idle / published / failed).
     """
@@ -62,45 +91,41 @@ def run_manual(config: dict, service, logger, dry_run: bool = False) -> dict:
         return {"status": "idle", "message": "Fichier(s) en cours de copie, nouvel essai au prochain tour."}
     files.sort(key=lambda f: _mtime(config, f["name"]))
 
-    due = due_slots(config, service.database, now)
-    if not due:
-        return {"status": "idle", "message": "Aucun créneau dû pour l'instant."}
+    slot = slot_due_now(config, service.database, now)
+    if not slot:
+        return {"status": "idle", "message": "Aucune heure de publication atteinte — fichiers en attente du prochain créneau."}
 
     networks = config.get("manual_schedule", {}).get("networks") or []
     today = now.date().isoformat()
-    results = []
-    for slot in due:
-        if not files:
-            break
-        source = files.pop(0)
-        try:
-            caption = generate_caption(source["name"])
-        except Exception as exc:
-            logger.warning("Génération de légende échouée pour %s : %s", source["name"], exc)
-            caption = source["name"]
-        result = service.publish_manual(
-            media_path=str(_path(config, source["name"])),
-            caption=caption,
-            scheduled_for=f"{today}T{slot}",
-            dry_run=dry_run,
-            networks=networks or None,
-            filename=source["name"],
-        )
-        status = result.get("status")
-        if not dry_run and status in ("published", "partial"):
-            delete_pending(config, source["name"])
-        results.append({"slot": slot, "file": source["name"], "status": status, "id": result.get("id")})
-        logger.info(
-            "Manuel %s: %s -> %s (id=%s)", slot, source["name"], status, result.get("id")
-        )
-        if not dry_run and status in ("failed", "error"):
-            break  # on laisse les autres fichiers pour les tours suivants
+    source = files.pop(0)
+    try:
+        caption = generate_caption(source["name"])
+    except Exception as exc:
+        logger.warning("Génération de légende échouée pour %s : %s", source["name"], exc)
+        caption = source["name"]
+    result = service.publish_manual(
+        media_path=str(_path(config, source["name"])),
+        caption=caption,
+        scheduled_for=f"{today}T{slot}",
+        dry_run=dry_run,
+        networks=networks or None,
+        filename=source["name"],
+    )
+    status = result.get("status")
+    if not dry_run and status in ("published", "partial"):
+        delete_pending(config, source["name"])
+    logger.info(
+        "Manuel %s: %s -> %s (id=%s)", slot, source["name"], status, result.get("id")
+    )
 
     success_states = ("published", "partial")
     if dry_run:
         success_states += ("prepared",)
-    overall = "published" if any(r["status"] in success_states for r in results) else "failed"
-    return {"status": overall, "results": results}
+    overall = "published" if status in success_states else "failed"
+    return {
+        "status": overall,
+        "results": [{"slot": slot, "file": source["name"], "status": status, "id": result.get("id")}],
+    }
 
 
 def _path(config: dict, name: str):

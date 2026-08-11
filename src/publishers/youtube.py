@@ -14,6 +14,8 @@ from ..config import ROOT
 from .base import BasePublisher
 
 TOKEN_PATH = ROOT / "BaseDeDonnées" / "youtube_token.pickle"
+# Tags YouTube par défaut quand aucun n'est fourni.
+DEFAULT_TAGS = ["VoixDeProspéritéEnChrist", "foi", "Bible", "prospérité", "prière"]
 # youtube.force-ssl : nécessaire pour poster le commentaire (commentThreads.insert).
 # youtube.upload seul ne suffit pas — relancer scripts/youtube_auth_setup.py une fois
 # pour que le nouveau scope soit accordé au token.
@@ -66,18 +68,27 @@ class YouTubePublisher(BasePublisher):
         }
 
     def publish(
-        self, *, media_path: str, text: str, details: str = ""
+        self, *, media_path: str, text: str, details: str = "",
+        tags: list[str] | None = None, comment: str | None = None,
     ) -> tuple[str, str | None, str | None]:
         retries = int(self.config.get("youtube", {}).get("max_retries", 3))
         privacy = self.config.get("youtube", {}).get("privacy_status", "public")
         title = (text or "Voix de Prospérité en Christ")[:100]
-        description = details or text or ""
+        tag_list = [
+            tag.strip().lstrip("#").strip()[:40]
+            for tag in (tags or DEFAULT_TAGS)
+            if tag and tag.strip()
+        ] or list(DEFAULT_TAGS)
+        description = (details or text or "")[:4900]
+        hashtags = " ".join(f"#{tag}" for tag in tag_list)
+        if hashtags and hashtags not in description:
+            description = (description.rstrip() + "\n\n" + hashtags) if description else hashtags
 
         body = {
             "snippet": {
                 "title": title,
                 "description": description,
-                "tags": ["VoixDeProspéritéEnChrist", "foi", "Bible", "prospérité"],
+                "tags": tag_list,
             },
             "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False},
         }
@@ -94,7 +105,8 @@ class YouTubePublisher(BasePublisher):
                 self.logger.info(
                     "YouTube Short publié : %s", video_id
                 )
-                comment_url = self._post_comment(service, video_id, details or text)
+                comment_text = comment if comment is not None else (details or text)
+                comment_url = self._post_comment(service, video_id, comment_text)
                 return (
                     video_id,
                     f"https://www.youtube.com/shorts/{video_id}",
