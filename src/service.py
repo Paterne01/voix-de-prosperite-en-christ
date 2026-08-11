@@ -336,7 +336,9 @@ class PublicationService:
             video_id, url, comment_url = yt.publish(
                 media_path=str(video_path),
                 text=content.title,
-                details=content.comment_text,
+                details=getattr(content, "youtube_description", None) or content.comment_text,
+                tags=getattr(content, "hashtags", None) or None,
+                comment=getattr(content, "youtube_comment", None),
             )
             self.database.update(
                 publication_id, youtube_video_id=video_id, youtube_url=url,
@@ -408,7 +410,7 @@ class PublicationService:
         publication_id: int | None = None, format: str = "manual",
         format_name: str = "Manuel", consume_source: bool = True,
     ) -> dict:
-        from .manual import kind_of
+        from .manual import generate_youtube_metadata, kind_of
 
         self._dry_run = dry_run
         media = Path(media_path)
@@ -419,9 +421,20 @@ class PublicationService:
             raise FileNotFoundError(f"Fichier introuvable : {media}")
         started = datetime.now(UTC)
 
-        _title = (caption.splitlines()[0] if caption else media.stem)[:60]
+        # Métadonnées YouTube optimisées (titre + tags + description) générées
+        # depuis le nom du fichier et la légende. La légende reste le texte
+        # visible Facebook/TikTok ; elle devient aussi la description YouTube.
+        try:
+            yt_meta = generate_youtube_metadata(media.name, caption)
+        except Exception as exc:
+            self.logger.warning("Métadonnées YouTube échouées pour %s : %s", media.name, exc)
+            yt_meta = {"title": caption.splitlines()[0] if caption else media.stem, "tags": [], "description": caption}
+
+        _title = (yt_meta.get("title") or caption.splitlines()[0] or media.stem)[:100]
         _caption = caption
         _comment = comment
+        _yt_description = yt_meta.get("description") or _caption
+        _tags = [t for t in yt_meta.get("tags") or [] if isinstance(t, str) and t.strip()]
 
         class _ManualContent:
             pillar = "Manuel"
@@ -431,12 +444,20 @@ class PublicationService:
             cta = ""
             decor = ""
             image_prompt = ""
-            hashtags: list[str] = []
+            hashtags: list[str] = _tags
             caption = _caption
             comment_text = _comment
+            youtube_description = _yt_description
+            youtube_comment = _comment  # "" → aucun commentaire YouTube
 
             def to_dict(self) -> dict:
-                return {"title": self.title, "caption": self.caption, "comment_text": self.comment_text, "hashtags": self.hashtags}
+                return {
+                    "title": self.title,
+                    "caption": self.caption,
+                    "comment_text": self.comment_text,
+                    "hashtags": self.hashtags,
+                    "youtube_description": self.youtube_description,
+                }
 
         content = _ManualContent()
         if publication_id is None:
@@ -504,7 +525,10 @@ class PublicationService:
             {k: v.get("status") for k, v in networks_out.items()},
         )
 
-        if networks_out and all(v.get("status") == "ok" for v in networks_out.values()):
+        # Résidus nettoyés dès que la publication est confirmée sur au moins un
+        # réseau (short recadré, calque, fichier source en attente). En cas
+        # d'échec total, le fichier reste pour un nouvel essai au prochain créneau.
+        if networks_out and any(v.get("status") == "ok" for v in networks_out.values()):
             self._purge(created_media)
             if consume_source:
                 try:

@@ -1,7 +1,49 @@
+from datetime import datetime
 from pathlib import Path
 
 from src.content import Content, ContentGenerator
 from src.database import HistoryDatabase
+from src.manual import generate_youtube_metadata
+from src.manual_scheduler import slot_due_now
+
+
+class _FakeManualDB:
+    """Stub de HistoryDatabase pour slot_due_now (marquage des créneaux faits)."""
+
+    def __init__(self, done: set[str] | None = None) -> None:
+        self._done = done or set()
+
+    def manual_slot_done(self, day: str, slot: str) -> bool:
+        return f"{day}T{slot}" in self._done
+
+
+def _manual_config() -> dict:
+    return {"manual_schedule": {"mode": "slots", "slots": ["04:00", "20:00"]}}
+
+
+def test_slot_due_now_waits_for_the_hour():
+    """Fichiers déposés en pleine journée : AUCUN créneau n'est dû, on attend."""
+    assert slot_due_now(_manual_config(), _FakeManualDB(), datetime(2026, 8, 11, 12, 0)) is None
+    assert slot_due_now(_manual_config(), _FakeManualDB(), datetime(2026, 8, 11, 4, 40)) is None
+
+
+def test_slot_due_now_active_only_around_the_hour():
+    assert slot_due_now(_manual_config(), _FakeManualDB(), datetime(2026, 8, 11, 3, 58)) == "04:00"
+    assert slot_due_now(_manual_config(), _FakeManualDB(), datetime(2026, 8, 11, 4, 5)) == "04:00"
+    assert slot_due_now(_manual_config(), _FakeManualDB(), datetime(2026, 8, 11, 20, 0)) == "20:00"
+
+
+def test_slot_due_now_skips_already_published_slot():
+    db = _FakeManualDB({"2026-08-11T04:00"})
+    assert slot_due_now(_manual_config(), db, datetime(2026, 8, 11, 4, 5)) is None
+
+
+def test_generate_youtube_metadata_fallback_without_key(monkeypatch):
+    monkeypatch.setattr("src.manual.get_secret", lambda name: None)
+    meta = generate_youtube_metadata("provision-divine.mp4", "Dieu pourvoit encore aujourd'hui.")
+    assert meta["title"]
+    assert meta["description"] == "Dieu pourvoit encore aujourd'hui."
+    assert isinstance(meta["tags"], list) and meta["tags"]
 
 
 def test_local_generator_respects_structure(tmp_path):
