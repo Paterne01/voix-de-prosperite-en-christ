@@ -14,6 +14,9 @@ from src.secrets import get_secret, secret_status, set_secret
 from src.service import PublicationService
 
 app = Flask(__name__)
+# Les templates sont relus à chaque requête : une édition d'interface est
+# visible immédiatement sans redémarrer le serveur.
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 _YT_TOKEN_PATH = ROOT / "BaseDeDonnées" / "youtube_token.pickle"
 _OAUTH = TikTokOAuth()
