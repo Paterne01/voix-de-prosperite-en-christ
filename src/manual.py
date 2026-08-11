@@ -78,7 +78,7 @@ def list_pending(config: dict) -> list[dict]:
             "size": stat.st_size,
             "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds"),
         })
-    items.sort(key=lambda item: item["modified"], reverse=True)
+    items.sort(key=lambda item: item["modified"])
     return items
 
 
