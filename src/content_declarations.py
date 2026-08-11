@@ -41,6 +41,55 @@ LOCAL_CTAS = [
     "Ouvre ton cœur et reçois cette déclaration aujourd'hui",
 ]
 
+# Deuxième phrase du texte local : combinée aux 7 plans de pilier, elle donne
+# 7 × len(LOCAL_MANIFEST) titres distincts — plusieurs fois plus que le nombre
+# maximal de déclarations publiées dans la fenêtre d'exclusion (90 jours).
+# Sans cette variabilité, le titre se limitait à 7 variantes fixes et le
+# générateur local finissait par échouer définitivement (impossible d'en
+# produire une inédite) quand Gemini est indisponible.
+LOCAL_MANIFEST = [
+    "Aujourd'hui, cette parole se met en marche et il se passe quelque chose.",
+    "Dès cette heure, cette promesse agit dans ta réalité.",
+    "Ce que tu attendais se prépare ; la main de Dieu est déjà à l'œuvre.",
+    "Les portes s'ouvrent, les blocages tombent, un nouvel ordre s'installe.",
+    "Ta saison change : ce qui était fermé commence à s'ouvrir.",
+    "La parole prononcée aujourd'hui travaille pour toi jour et nuit.",
+    "Ton chemin s'éclaire, et chaque pas te rapproche de ta destinée.",
+    "Ce qui semblait impossible se met en place devant tes yeux.",
+    "Les cieux coopèrent avec ta foi : l'ouvrage avance.",
+    "Un vent nouveau souffle sur tes affaires et tes relations.",
+    "Tes semences sont activées ; la récolte approche.",
+    "Le silence se brise ; Dieu se montre à ceux qui l'espèrent.",
+    "Ta renaissance commence maintenant, pierre par pierre.",
+    "Chaque matin, cette parole confirme ta direction.",
+    "Ce qui était en retard se rattrape : tu entres dans ton année.",
+    "Le ciel a entendu ; la réponse est déjà en route.",
+    "Ce qui te limitait cède la place à un avenir ouvert.",
+    "Une porte invisible s'ouvre et tu la reconnais au bon moment.",
+    "Tes efforts portent enfin du fruit, visible et durable.",
+    "La grâce du matin accompagne chacun de tes pas.",
+    "Ce que tu as semé dans la foi germe sous la terre.",
+    "Les obstacles reculent et ton horizon s'élargit.",
+    "Un repos nouveau t'est donné pour avancer sans crainte.",
+    "Tes relations se stabilisent et ta maison s'apaise.",
+    "Tu reçois l'intelligence de Dieu pour chaque décision.",
+    "Ce qui manquait est pourvu ; tu n'es plus dans le déficit.",
+    "Ta parole a du poids ; ton oui et ton non s'établissent.",
+    "Une douceur nouvelle remplace les tensions d'hier.",
+    "Tu sèmes avec confiance, car la terre répond.",
+    "Des alliés se lèvent pour t'aider sans que tu le demandes.",
+    "Ta santé intérieure se fortifie jour après jour.",
+    "Les dettes se dénouent et l'abondance reprend sa place.",
+    "Tu oses de nouveau : la peur a perdu son autorité.",
+    "Ce qui était éparpillé se rassemble et trouve son ordre.",
+    "Une faveur précise t'ouvre la bonne porte au bon moment.",
+    "Ton nom est béni dans les lieux où tu passes.",
+    "Tu reçois de la force là où tu étais épuisé.",
+    "Ce que tu croyais perdu revient entre tes mains.",
+    "Ta semence ne tombe pas à vide : elle multiplie.",
+    "La paix revient là où régnait le tumulte.",
+]
+
 VERSES = [
     "Ésaïe 60:1", "Philippiens 4:13", "Proverbes 3:6", "Psaume 20:5",
     "Jérémie 29:11", "Romains 8:11", "Deutéronome 28:12", "Ésaïe 61:1",
@@ -211,7 +260,7 @@ class DeclarationGenerator:
             "Provision Active": "La provision arrive ; les portes s'ouvrent et tu sais y entrer.",
             "Générosité": "Tu deviens une source ; ce que tu reçois, tu le bénis et le partages.",
         }[pillar]
-        line = f"{plan} Aujourd'hui, cette parole se met en marche et il se passe quelque chose."
+        line = f"{plan} {LOCAL_MANIFEST[index % len(LOCAL_MANIFEST)]}"
         dim = CLOSURE_DIMENSIONS[index % len(CLOSURE_DIMENSIONS)]
         closure = f"Je déclare la faveur de Dieu sur {dim}. Amen."
         cta = LOCAL_CTAS[index % len(LOCAL_CTAS)]
@@ -236,6 +285,15 @@ class DeclarationGenerator:
             raise ValueError("Déclaration sans phrase de clôture")
         if not content.cta:
             raise ValueError("Déclaration sans appel à l'action")
+        # Unicité stricte garantissable uniquement sur l'« identité » du post
+        # (titre + sujet). verse_reference et cta ont un petit stock (quelques
+        # versets, quelques appels) : exiger leur inédit sur 90 jours rendrait
+        # l'échec certain dès que le stock est épuisé — on les passe seulement
+        # comme « pistes » à Gemini pour la fraîcheur, sans bloquer la
+        # génération locale.
+        unique = {"title", "topic"}
         for field in exclusions:
+            if field not in unique:
+                continue
             if _clean(str(getattr(content, field))).casefold() in set(exclusions[field]):
                 raise ValueError(f"Doublon sur 90 jours : {field}")
