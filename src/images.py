@@ -20,10 +20,11 @@ _IMAGE_BACKGROUND_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 COMMENT_PILL = "DÉTAILS EN COMMENTAIRE"
 
 # Format B : les fonds sont des photos de prédicateurs, la zone haute (visage)
-# doit rester dégagée. Le bloc texte est centré verticalement dans la bande
-# médiane du post, sous le visage.
-MID_BAND_TOP = 820
-MID_BAND_BOTTOM = 1660
+# doit rester dégagée : le quart supérieur de l'image est libre, le bloc texte
+# est centré dans la bande située juste en dessous. Si le bloc est trop haut
+# pour la bande, il est automatiquement réduit pour ne jamais être coupé en bas.
+MID_BAND_TOP = 480
+MID_BAND_BOTTOM = 1700
 BLOCK_SPACING = 36
 
 
@@ -176,38 +177,23 @@ class ImageService:
             self._draw_pill(draw, pill_text, y=cursor_y + 40)
 
     def _draw_branding_centered(self, draw: ImageDraw.ImageDraw, content) -> None:
-        """Format B : bloc texte (titre, accroche, pastille CTA) descendu et
-        centré verticalement dans la bande médiane du post.
+        """Format B : bloc texte (titre, accroche, pastille CTA) positionné sous
+        le quart supérieur de l'image (zone libre pour le visage du prédicateur).
 
-        Le fond étant désormais une photo de prédicateur, la partie supérieure
-        reste entièrement libre ; le bloc est d'abord mesuré, puis centré.
+        Le bloc est d'abord mesuré puis, s'il dépasserait la bande disponible,
+        entièrement réduit (polices et hauteurs de boîtes) pour tenir sans être
+        coupé en bas.
         """
-        blocks: list[tuple[FittedText, str | None, bool]] = []
-        title_fit = fit_text_block(
-            draw, content.title, _font_path(True),
-            box_width=900, box_height=540, max_font_size=92, min_font_size=40,
-        )
-        blocks.append((title_fit, "#f7ead0", False))
-        if content.hook:
-            hook_fit = fit_text_block(
-                draw, content.hook, _font_path(False),
-                box_width=900, box_height=400, max_font_size=56, min_font_size=28,
-            )
-            blocks.append((hook_fit, "#cfd9ea", False))
-        pill_text = getattr(content, "cta", "") or content.closure
-        if pill_text:
-            pill_fit = fit_text_block(
-                draw, pill_text, _font_path(True),
-                box_width=820, box_height=130, max_font_size=34, min_font_size=20,
-            )
-            blocks.append((pill_fit, None, True))
+        available = MID_BAND_BOTTOM - MID_BAND_TOP
+        blocks = self._fit_blocks(draw, content, scale=1.0)
+        for _ in range(6):
+            total = self._blocks_height(blocks)
+            if total <= available:
+                break
+            blocks = self._fit_blocks(draw, content, scale=0.97 * available / total)
+        total = min(self._blocks_height(blocks), available)
 
-        heights = [
-            self._pill_height(fit) if is_pill else fit.line_height * len(fit.lines)
-            for fit, _, is_pill in blocks
-        ]
-        total = sum(heights) + BLOCK_SPACING * (len(blocks) - 1)
-        cursor_y = max(MID_BAND_TOP, (MID_BAND_TOP + MID_BAND_BOTTOM) // 2 - total // 2)
+        cursor_y = MID_BAND_TOP + max(0, (available - total) // 2)
 
         for fit, fill, is_pill in blocks:
             if is_pill:
@@ -215,6 +201,41 @@ class ImageService:
             else:
                 cursor_y = self._draw_lines(draw, fit, x=90, y=cursor_y, fill=fill)
                 cursor_y += BLOCK_SPACING
+
+    def _fit_blocks(self, draw: ImageDraw.ImageDraw, content, scale: float) -> list:
+        """Mesure les blocs (titre, accroche, pastille CTA) du Format B avec un
+        facteur d'échelle appliqué aux polices et hauteurs de boîtes."""
+        def s(value: int) -> int:
+            return max(8, int(value * scale))
+
+        blocks: list[tuple[FittedText, str | None, bool]] = []
+        title_fit = fit_text_block(
+            draw, content.title, _font_path(True),
+            box_width=900, box_height=s(540), max_font_size=s(92), min_font_size=s(40),
+        )
+        blocks.append((title_fit, "#f7ead0", False))
+        if content.hook:
+            hook_fit = fit_text_block(
+                draw, content.hook, _font_path(False),
+                box_width=900, box_height=s(400), max_font_size=s(56), min_font_size=s(28),
+            )
+            blocks.append((hook_fit, "#cfd9ea", False))
+        pill_text = getattr(content, "cta", "") or content.closure
+        if pill_text:
+            pill_fit = fit_text_block(
+                draw, pill_text, _font_path(True),
+                box_width=820, box_height=s(130), max_font_size=s(34), min_font_size=s(20),
+            )
+            blocks.append((pill_fit, None, True))
+        return blocks
+
+    @staticmethod
+    def _blocks_height(blocks: list) -> int:
+        heights = [
+            ImageService._pill_height(fit) if is_pill else fit.line_height * len(fit.lines)
+            for fit, _, is_pill in blocks
+        ]
+        return sum(heights) + BLOCK_SPACING * (len(blocks) - 1)
 
     def _draw_pill(self, draw: ImageDraw.ImageDraw, text: str, *, y: int) -> int:
         """Dessine la pastille (CTA / commentaire) et renvoie son bas."""
