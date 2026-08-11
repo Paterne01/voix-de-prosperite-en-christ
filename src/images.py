@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .config import FORMAT_KEYS, absolute_path
 from .secrets import get_secret
-from .text_fit import fit_text_block
+from .text_fit import FittedText, fit_text_block
 
 # Canevas vertical 9:16 (1080x1920) appliqué à TOUS les modes (local, cloud,
 # manuel). _brand() force .resize((W, H)) juste avant l'enregistrement, donc
@@ -277,6 +277,17 @@ class ImageService:
             draw.text((x, cursor_y), line, font=fitted.font, fill=fill)
             cursor_y += fitted.line_height
         return cursor_y
+
+    @staticmethod
+    def _draw_lines(
+        draw, fitted: FittedText, *, x: int, y: int, fill,
+    ) -> int:
+        """Dessine un bloc déjà ajusté (fit_text_block) et retourne le Y juste
+        après la dernière ligne."""
+        for line in fitted.lines:
+            draw.text((x, y), line, font=fitted.font, fill=fill)
+            y += fitted.line_height
+        return y
 
     # ── sauvegarde ───────────────────────────────────────────────────
 
