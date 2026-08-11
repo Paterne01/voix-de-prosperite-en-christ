@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .config import absolute_path
+from .config import FORMAT_KEYS, absolute_path
 from .secrets import get_secret
 from .text_fit import fit_text_block
 
@@ -18,6 +18,13 @@ _IMAGE_BACKGROUND_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
 # Pastille fixe du Format A (les détails sont publiés en commentaire).
 COMMENT_PILL = "DÉTAILS EN COMMENTAIRE"
+
+# Format B : les fonds sont des photos de prédicateurs, la zone haute (visage)
+# doit rester dégagée. Le bloc texte est centré verticalement dans la bande
+# médiane du post, sous le visage.
+MID_BAND_TOP = 820
+MID_BAND_BOTTOM = 1660
+BLOCK_SPACING = 36
 
 
 def _font(size: int, bold: bool = False) -> ImageFont.ImageFont:
@@ -138,10 +145,18 @@ class ImageService:
         """Dessine titre + accroche + pastille CTA + logo sur `image` (RGBA).
 
         Partagé par _brand (fond déjà composé) et overlay (fond transparent).
+        Format B : texte descendu et centré au milieu du post (zone haute libre
+        pour le visage du prédicateur) ; Format A : comportement historique.
         """
         draw = ImageDraw.Draw(image)
+        if FORMAT_KEYS.get(format, "format_a") == "format_b":
+            self._draw_branding_centered(draw, content)
+        else:
+            self._draw_branding_top(draw, content)
+        self._draw_logo(image)
 
-        # Titre — bloc auto-ajusté dans sa zone.
+    def _draw_branding_top(self, draw: ImageDraw.ImageDraw, content) -> None:
+        """Format A : habillage historique (titre en haut, à 300 px)."""
         cursor_y = self._draw_fitted(
             draw, content.title, x=90, y=300, box_width=900, box_height=540,
             bold=True, max_font=92, min_font=40, fill="#f7ead0",
@@ -154,12 +169,52 @@ class ImageService:
                 bold=False, max_font=56, min_font=28, fill="#cfd9ea",
             )
 
-        # Pastille — Format A : « Détails en commentaire » ; Format B : CTA humain.
-        pill_text = COMMENT_PILL if format == "video" else getattr(content, "cta", "") or content.closure
+        # Pastille — Format A : « Détails en commentaire » (le CTA du Format B
+        # est géré dans _draw_branding_centered).
+        pill_text = COMMENT_PILL
         if pill_text:
             self._draw_pill(draw, pill_text, y=cursor_y + 40)
 
-        self._draw_logo(image)
+    def _draw_branding_centered(self, draw: ImageDraw.ImageDraw, content) -> None:
+        """Format B : bloc texte (titre, accroche, pastille CTA) descendu et
+        centré verticalement dans la bande médiane du post.
+
+        Le fond étant désormais une photo de prédicateur, la partie supérieure
+        reste entièrement libre ; le bloc est d'abord mesuré, puis centré.
+        """
+        blocks: list[tuple[FittedText, str | None, bool]] = []
+        title_fit = fit_text_block(
+            draw, content.title, _font_path(True),
+            box_width=900, box_height=540, max_font_size=92, min_font_size=40,
+        )
+        blocks.append((title_fit, "#f7ead0", False))
+        if content.hook:
+            hook_fit = fit_text_block(
+                draw, content.hook, _font_path(False),
+                box_width=900, box_height=400, max_font_size=56, min_font_size=28,
+            )
+            blocks.append((hook_fit, "#cfd9ea", False))
+        pill_text = getattr(content, "cta", "") or content.closure
+        if pill_text:
+            pill_fit = fit_text_block(
+                draw, pill_text, _font_path(True),
+                box_width=820, box_height=130, max_font_size=34, min_font_size=20,
+            )
+            blocks.append((pill_fit, None, True))
+
+        heights = [
+            self._pill_height(fit) if is_pill else fit.line_height * len(fit.lines)
+            for fit, _, is_pill in blocks
+        ]
+        total = sum(heights) + BLOCK_SPACING * (len(blocks) - 1)
+        cursor_y = max(MID_BAND_TOP, (MID_BAND_TOP + MID_BAND_BOTTOM) // 2 - total // 2)
+
+        for fit, fill, is_pill in blocks:
+            if is_pill:
+                cursor_y = self._draw_pill_from(draw, fit, y=cursor_y)
+            else:
+                cursor_y = self._draw_lines(draw, fit, x=90, y=cursor_y, fill=fill)
+                cursor_y += BLOCK_SPACING
 
     def _draw_pill(self, draw: ImageDraw.ImageDraw, text: str, *, y: int) -> int:
         """Dessine la pastille (CTA / commentaire) et renvoie son bas."""
@@ -167,7 +222,16 @@ class ImageService:
             draw, text, _font_path(True),
             box_width=820, box_height=130, max_font_size=34, min_font_size=20,
         )
-        pill_h = max(70, fitted.line_height * len(fitted.lines) + 18)
+        return self._draw_pill_from(draw, fitted, y=y)
+
+    @staticmethod
+    def _pill_height(fitted: FittedText) -> int:
+        return max(70, fitted.line_height * len(fitted.lines) + 18)
+
+    @staticmethod
+    def _draw_pill_from(draw: ImageDraw.ImageDraw, fitted: FittedText, *, y: int) -> int:
+        """Dessine une pastille déjà ajustée et renvoie son bas."""
+        pill_h = ImageService._pill_height(fitted)
         draw.rounded_rectangle((90, y, 990, y + pill_h), radius=18, fill="#b68a37")
         ty = y + (pill_h - fitted.line_height * len(fitted.lines)) // 2
         for line in fitted.lines:
