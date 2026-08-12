@@ -210,9 +210,9 @@ courts et directs, phrases qui parlent au « tu », aucune tournure scolaire du 
 « en conclusion », « ci-dessus », « nous pouvons constater que ». Le label avant la
 vérité est choisi au hasard par le système, ne l'écris pas dans le JSON.
 
-HASHTAGS — génère 4 à 6 hashtags VARIÉS, choisis selon le pilier et le sujet du jour
-(jamais le même jeu fixe). Inclus toujours #VoixDeProspéritéEnChrist puis des tags en lien
-avec le thème. Sans espaces, avec « # ».
+HASHTAGS — génère EXACTEMENT 5 hashtags VARIÉS, choisis selon le pilier et le sujet du
+jour (jamais le même jeu fixe). Inclus toujours #VoixDeProspéritéEnChrist puis des tags
+en lien avec le thème. Sans espaces, avec « # ». JAMAIS plus de 5, JAMAIS moins de 5.
 
 DÉCOR — le champ "decor" décrit une scène premium pour l'image (sans personnes célèbres,
 sans texte, sans logos). "image_prompt" traduit cette scène pour un générateur d'images.
@@ -268,18 +268,12 @@ class ContentGenerator:
             )
         client = genai.Client(api_key=key)
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt_text)
-        if avoid:
-            prompt += (
-                f"\nTon brouillon précédent a été rejeté pour ce motif : {avoid}.\n"
-                "Corrige-le maintenant : choisis un AUTRE verset, une autre accroche, "
-                "un autre appel à l'action, et vérifie que le nombre annoncé dans le "
-                "titre égale exactement le nombre de points. Aucun élément interdit ci-dessus."
-            )
-        client = genai.Client(api_key=key)
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         raw = response.text.strip().removeprefix("```json").removesuffix("```").strip()
         data = json.loads(raw)
-        data.setdefault("hashtags", _build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))))
+        data["hashtags"] = normalize_hashtags(
+            data.get("hashtags"),
+            fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),
+        )
         content = Content(**{field: data[field] for field in Content.__dataclass_fields__})
         self._validate(content, exclusions)
         return content
