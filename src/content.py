@@ -120,6 +120,7 @@ class Content:
     image_prompt: str
     hashtags: list[str]
     hook_type: str = ""
+    engagement_score: int | None = None
 
     @staticmethod
     def _pick(variants: list[str], title: str) -> str:
@@ -314,6 +315,7 @@ class ContentGenerator:
             fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),
         )
         data["hook_type"] = hook_key
+        data.setdefault("engagement_score", None)
         content = Content(**{field: data[field] for field in Content.__dataclass_fields__})
         self._validate(content, exclusions)
         return content
@@ -365,6 +367,39 @@ class ContentGenerator:
             hashtags=_build_hashtags(pillar, topic, random.Random(topic)),
             hook_type=hook_key,
         )
+
+    def _score_engagement(self, content: Content, key: str | None = None) -> int | None:
+        """Note d'engagement (1-10) du brouillon, via un court appel Gemini.
+
+        Appelée uniquement si le service autorise le scoring (config
+        `engagement_score`) sinon le quota gratuit Gemini de 20 requêtes/jour
+        serait dépassé par les posts automatiques. Ne lève JAMAIS : un échec
+        renvoie None et la publication continue normalement.
+        """
+        if not key:
+            key = get_secret("gemini_api_key")
+        if not key:
+            return None
+        try:
+            from google import genai
+
+            prompt = (
+                "Tu es un rédacteur social. Note de 1 à 10 (un entier seul, "
+                "rien d'autre) la capacité d'engagement de ce post Facebook "
+                "chrétien : accroche qui touche une douleur réelle, rythme "
+                "oral court, appel à l'action précis et actionnable, pas de "
+                "tournures robots, hashtags corrects.\n"
+                f"TITRE : {content.title}\n"
+                f"ACCROCHE : {content.hook}\n"
+                f"CTA : {content.cta}\n"
+                f"HASHTAGS : {' '.join(content.hashtags)}"
+            )
+            client = genai.Client(api_key=key)
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            score = int((response.text or "").strip()[:2])
+            return score if 1 <= score <= 10 else None
+        except Exception:
+            return None
 
     def _validate(self, content: Content, exclusions: dict[str, list[str]]) -> None:
         if content.pillar not in PILLARS or len(content.title.split()) > 15 or not (3 <= len(content.points) <= 7):

@@ -156,6 +156,13 @@ STYLE — français ORAL, direct, chaleureux, au « tu » (grand frère qui parl
 Afrique francophone). Phrases courtes. La déclaration se raconte au PRÉSENT, comme une
 parole déjà en marche : « Je déclare que… », « Tu es… », « Aujourd'hui il se passe ceci… ».
 
+OUVERTURE VARIÉE — ne commence jamais deux posts de la même façon. Alterne volontairement :
+parfois « Je déclare… », parfois « Aujourd'hui… », parfois une question qui accroche le
+lecteur, parfois une petite scène de vie en ouverture, parfois l'affirmation directe.
+L'ouverture doit TOUCHER une réalité que le lecteur vit (honte financière, comparaison,
+peur de l'échec, prières sans réponse, jugement des proches, travail sans résultat visible)
+puis basculer en déclaration positive. Ne nomme JAMAIS le type d'ouverture choisi.
+
 CONTENU — « declaration » : le corps du texte, 2 à 4 phrases, 40 mots max. Il doit être
 affirmatif, responsable, et inspirer action ET foi. Termine par un verset cité avec sa
 référence exacte (ex. « Ésaïe 19:1 » — jamais sans la référence, jamais inventée au format
@@ -170,9 +177,12 @@ il doit être différent à chaque post — vérifie les « éléments interdits
 n'écris jamais le même CTA que les posts récents.
 
 STYLE — PAS de commentaire long ni de liste. PAS de tournures robots : « il est essentiel
-de », « n'oublions pas que », « en conclusion », « il convient de ». Pas de cascades d'émojis.
-Chaque post change de structure (parfois « Je déclare », parfois « Aujourd'hui »,
-parfois une question-réponse, parfois une petite scène de vie).
+de », « n'oublions pas que », « en conclusion », « il convient de », « n'hésite pas à ».
+Pas de cascades d'émojis. JAMAIS deux posts avec la même ouverture et le même CTA en même
+temps (le système fournit les éléments interdits récents : vérifie-les).
+
+CRU — Ne promets JAMAIS gain matériel garanti, richesse, guérison ou résultat automatique.
+La déclaration doit rester spirituellement responsable et inspirer foi ET action concrète.
 
 Photos — « decor » décrit une scène premium pour l'image (jamais de personnes célèbres, pas
 de texte, pas de logos) ; « image_prompt » traduit la scène pour un générateur.
@@ -264,7 +274,19 @@ class DeclarationGenerator:
             "Provision Active": "La provision arrive ; les portes s'ouvrent et tu sais y entrer.",
             "Générosité": "Tu deviens une source ; ce que tu reçois, tu le bénis et le partages.",
         }[pillar]
-        line = f"{plan} {LOCAL_MANIFEST[index % len(LOCAL_MANIFEST)]}"
+        # OUVERTURE VARIÉE : ne pas toujours commencer par « plan + manifeste ».
+        # On alterne une question d'accroche occasionnelle pour toucher la
+        # douleur AVANT la déclaration (cf. SYSTEM_PROMPT_DECLARATION).
+        openers = [
+            "",  # affirmation directe classique
+            "",  # affirmation directe classique
+            "Tu te demandes si cela va un jour changer ? ",
+            "Fatigué de promesses sans effet ? ",
+            "Si tu as déjà douté en secret, écoute ceci : ",
+            "",
+        ]
+        opener = openers[index % len(openers)]
+        line = f"{opener}{plan} {LOCAL_MANIFEST[index % len(LOCAL_MANIFEST)]}"
         dim = CLOSURE_DIMENSIONS[index % len(CLOSURE_DIMENSIONS)]
         closure = f"Je déclare la faveur de Dieu sur {dim}. Amen."
         cta = LOCAL_CTAS[index % len(LOCAL_CTAS)]

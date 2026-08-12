@@ -62,6 +62,19 @@ class HistoryDatabase:
                     created_at TEXT NOT NULL
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS overlays (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    overlay_type TEXT NOT NULL,
+                    file_path TEXT,
+                    text_content TEXT,
+                    active INTEGER NOT NULL DEFAULT 1,
+                    format_scope TEXT NOT NULL DEFAULT 'all',
+                    created_at TEXT NOT NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_overlays_type ON overlays(overlay_type, active)")
             try:
                 conn.execute("ALTER TABLE post_formats ADD COLUMN tier TEXT NOT NULL DEFAULT 'free'")
             except sqlite3.OperationalError:
@@ -120,7 +133,7 @@ class HistoryDatabase:
             "facebook_url", "youtube_video_id", "youtube_url", "youtube_comment_id", "youtube_comment_url",
             "tiktok_publish_id", "tiktok_url",
             "status", "error", "format", "background", "format_name", "source_filename",
-            "hook_type",
+            "hook_type", "engagement_score",
         ]
         values = [record.get(field) for field in fields]
         with self.connect() as conn:
@@ -253,6 +266,84 @@ class HistoryDatabase:
     def delete_format(self, format_id: int) -> None:
         with self.connect() as conn:
             conn.execute("DELETE FROM post_formats WHERE id = ?", (format_id,))
+
+    # ── overlays (intro/outro vidéo, watermark, texte image) ─────────
+
+    OVERLAY_TYPES = ("intro", "outro", "watermark", "image_text")
+
+    def list_overlays(self, overlay_type: str | None = None) -> list[dict]:
+        sql = "SELECT * FROM overlays"
+        params: tuple = ()
+        if overlay_type:
+            sql += " WHERE overlay_type = ?"
+            params = (overlay_type,)
+        sql += " ORDER BY overlay_type, id"
+        with self.connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_overlay(self, overlay_id: int) -> dict | None:
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM overlays WHERE id = ?", (overlay_id,)).fetchone()
+        return dict(row) if row else None
+
+    def create_overlay(
+        self, *, name: str, overlay_type: str, file_path: str | None = None,
+        text_content: str | None = None, active: bool = True, format_scope: str = "all",
+    ) -> int:
+        if overlay_type not in self.OVERLAY_TYPES:
+            raise ValueError(f"Type d'overlay inconnu : {overlay_type}")
+        with self.connect() as conn:
+            cursor = conn.execute(
+                "INSERT INTO overlays (name, overlay_type, file_path, text_content, active, format_scope, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    name, overlay_type, file_path, text_content,
+                    1 if active else 0, format_scope,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def update_overlay(
+        self, overlay_id: int, *, name: str, overlay_type: str,
+        file_path: str | None = None, text_content: str | None = None,
+        active: bool = True, format_scope: str = "all",
+    ) -> None:
+        if overlay_type not in self.OVERLAY_TYPES:
+            raise ValueError(f"Type d'overlay inconnu : {overlay_type}")
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE overlays SET name = ?, overlay_type = ?, file_path = ?, "
+                "text_content = ?, active = ?, format_scope = ? WHERE id = ?",
+                (
+                    name, overlay_type, file_path, text_content,
+                    1 if active else 0, format_scope, overlay_id,
+                ),
+            )
+
+    def delete_overlay(self, overlay_id: int) -> None:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM overlays WHERE id = ?", (overlay_id,))
+
+    def active_overlays(self, overlay_type: str | None = None, format: str | None = None) -> list[dict]:
+        """Overlays actifs, optionnellement filtrés par type et/ou format.
+
+        format_scope : "all" → toutes les productions ; "video" / "declaration"
+        → uniquement celles de ce format.
+        """
+        sql = "SELECT * FROM overlays WHERE active = 1"
+        params: list = []
+        if overlay_type:
+            sql += " AND overlay_type = ?"
+            params.append(overlay_type)
+        if format:
+            sql += " AND (format_scope = 'all' OR format_scope = ?)"
+            params.append(format)
+        sql += " ORDER BY id"
+        with self.connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [dict(row) for row in rows]
 
     def seed_default_formats(self, schedule: list[str]) -> None:
         """Crée les deux formats par défaut si la table est vide (migration)."""

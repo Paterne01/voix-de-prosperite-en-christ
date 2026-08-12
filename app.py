@@ -80,6 +80,131 @@ def list_formats():
     return jsonify(formats=service().database.list_formats())
 
 
+# ── Overlays (intro/outro vidéo, watermark, texte image) ─────────────
+
+@app.get("/overlays")
+def overlays_page():
+    db = service().database
+    return render_template(
+        "overlays.html",
+        overlays=db.list_overlays(),
+        types=db.OVERLAY_TYPES,
+        now=datetime.now().strftime("%d/%m/%Y %H:%M"),
+    )
+
+
+@app.get("/api/overlays")
+def list_overlays():
+    db = service().database
+    return jsonify(overlays=db.list_overlays())
+
+
+@app.post("/api/overlays")
+def create_overlay():
+    from src.config import absolute_path
+
+    db = service().database
+    params = _overlay_params()
+    if not params["name"] or params["overlay_type"] not in db.OVERLAY_TYPES:
+        return jsonify(ok=False, error="Nom et type d'overlay requis."), 400
+    overlay_type = params["overlay_type"]
+    if overlay_type in ("intro", "outro", "watermark"):
+        file = request.files.get("file")
+        if not file or not file.filename:
+            return jsonify(ok=False, error=f"Un fichier vidéo est requis pour un overlay « {overlay_type} »."), 400
+        target = _save_overlay_file(file)
+        params["file_path"] = str(target)
+    elif overlay_type == "image_text" and not params["text_content"]:
+        return jsonify(ok=False, error="Le texte de la banderole est requis."), 400
+    overlay_id = db.create_overlay(**params)
+    return jsonify(ok=True, id=overlay_id, overlays=db.list_overlays())
+
+
+@app.post("/api/overlays/<int:overlay_id>")
+def update_overlay(overlay_id: int):
+    db = service().database
+    record = db.get_overlay(overlay_id)
+    if not record:
+        return jsonify(ok=False, error="Overlay introuvable."), 404
+    params = _overlay_params(record)
+    if not params["name"] or params["overlay_type"] not in db.OVERLAY_TYPES:
+        return jsonify(ok=False, error="Nom et type d'overlay requis."), 400
+    overlay_type = params["overlay_type"]
+    if overlay_type in ("intro", "outro", "watermark"):
+        file = request.files.get("file")
+        if file and file.filename:
+            params["file_path"] = str(_save_overlay_file(file))
+    elif overlay_type == "image_text" and not params["text_content"]:
+        return jsonify(ok=False, error="Le texte de la banderole est requis."), 400
+    db.update_overlay(overlay_id, **params)
+    return jsonify(ok=True, overlays=db.list_overlays())
+
+
+@app.post("/api/overlays/<int:overlay_id>/toggle")
+def toggle_overlay(overlay_id: int):
+    db = service().database
+    record = db.get_overlay(overlay_id)
+    if not record:
+        return jsonify(ok=False, error="Overlay introuvable."), 404
+    active = request.form.get("active") == "on"
+    db.update_overlay(
+        overlay_id,
+        name=record["name"],
+        overlay_type=record["overlay_type"],
+        file_path=record.get("file_path"),
+        text_content=record.get("text_content"),
+        active=active,
+        format_scope=record.get("format_scope") or "all",
+    )
+    return jsonify(ok=True, overlays=db.list_overlays())
+
+
+@app.post("/api/overlays/<int:overlay_id>/delete")
+def delete_overlay(overlay_id: int):
+    db = service().database
+    if not db.get_overlay(overlay_id):
+        return jsonify(ok=False, error="Overlay introuvable."), 404
+    db.delete_overlay(overlay_id)
+    return jsonify(ok=True, overlays=db.list_overlays())
+
+
+def _overlay_params(defaults: dict | None = None) -> dict:
+    """Construit les paramètres d'overlay depuis le formulaire.
+
+    Pour la création : `active` prend la valeur de la case à cocher (absente
+    quand décochée). Pour la modification : on part des valeurs enregistrées et
+    on ne garde que les champs réellement envoyés.
+    """
+    if defaults is None:
+        active = request.form.get("active") == "on"
+    else:
+        value = request.form.get("active")
+        active = value == "on" if value is not None else bool(defaults.get("active"))
+    return {
+        "name": (request.form.get("name") or (defaults or {}).get("name") or "").strip(),
+        "overlay_type": request.form.get("overlay_type") or (defaults or {}).get("overlay_type") or "",
+        "file_path": None,
+        "text_content": request.form.get("text_content") or (defaults or {}).get("text_content"),
+        "active": active,
+        "format_scope": request.form.get("format_scope") or (defaults or {}).get("format_scope") or "all",
+    }
+
+
+def _overlay_dir() -> Path:
+    from src.config import ROOT as _ROOT
+
+    root = _ROOT / "assets" / "overlays"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _save_overlay_file(file) -> Path:
+    safe_name = Path(file.filename).name
+    target = _overlay_dir() / f"{datetime.now():%Y%m%d_%H%M%S}_{safe_name}"
+    file.save(target)
+    return target
+
+
 @app.post("/api/formats")
 def create_format():
     name = request.form.get("name", "").strip()

@@ -96,6 +96,7 @@ class PublicationService:
             "format_name": format_name,
             "background": background,
             "hook_type": getattr(content, "hook_type", "") or None,
+            "engagement_score": getattr(content, "engagement_score", None),
         }
 
     # ── prepare ──────────────────────────────────────────────────────
@@ -104,6 +105,15 @@ class PublicationService:
         from .backgrounds import pick_background
 
         content = self._generator(format).generate(prompt=prompt)
+        # Note d'engagement optionnelle (quota Gemini 20 req/j : activable via
+        # config `engagement_score: true`, sinon aucun appel supplémentaire).
+        score = None
+        if self.config.get("engagement_score"):
+            generator = self._generator(format)
+            if hasattr(generator, "_score_engagement"):
+                score = generator._score_engagement(content)
+        if score is not None:
+            content.engagement_score = score
         bg_name, bg_path, bg_kind = pick_background(self.config, self.database, format)
         image_path = self.images.create(content, mode=mode, background=bg_path, format=format)
         # Fond vidéo → on prépare un calque texte transparent à superposer dans ffmpeg.
