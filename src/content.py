@@ -26,6 +26,58 @@ PILLAR_TAGS = {
     "Générosité": ["#Générosité", "#Partage", "#Bénédiction"],
 }
 
+# Types d'accroche possibles pour le premier post. Le système en choisit un au
+# hasard (jamais deux posts consécutifs du même type) et le stocke en SQLite
+# (colonne hook_type) comme les titres. L'IA reçoit le type imposé et produit
+# une première phrase conforme.
+HOOK_TYPES = [
+    ("question_pain", "Une question qui fait mal"),
+    ("constat_cache", "Un constat qui nomme une réalité cachée"),
+    ("contre_intuitif", "Une déclaration contre-intuitive"),
+    ("identification", "Un déclencheur d'identification"),
+    ("chiffre", "Un chiffre ou fait inattendu"),
+]
+HOOK_STRUCTURE_EXAMPLES = {
+    "question_pain": "Tu travailles dur depuis des années et tu te demandes encore pourquoi ça ne décolle pas ?",
+    "constat_cache": "Beaucoup de gens prient pour sortir de la pauvreté mais ont peur en secret d'y croire vraiment.",
+    "contre_intuitif": "Ce n'est pas ton manque d'argent qui te bloque. C'est ce que tu crois sur toi-même.",
+    "identification": "Si tu as déjà honte de ta situation devant ta famille, ce post est pour toi.",
+    "chiffre": "En Afrique, des milliers de personnes abandonnent chaque année à cause d'une seule croyance limitante.",
+}
+
+# Hashtags « génériques » servant uniquement à compléter une réponse de l'IA
+# qui en aurait fourni moins de 5 (jamais pour en rajouter à une réponse complète).
+_FALLBACK_HASHTAGS = [
+    "#VoixDeProspéritéEnChrist", "#ProspéritéDivine", "#FoiEtTravail",
+    "#ParoleDuJour", "#Foi",
+]
+
+
+def normalize_hashtags(hashtags, fallback: list[str] | None = None) -> list[str]:
+    """Normalise une liste de hashtags à EXACTEMENT 5 éléments, sans doublon.
+
+    - nettoie (espaces, '#', vides) ;
+    - dédoublonne en gardant l'ordre ;
+    - tronque à 5 si la réponse de l'IA en contient plus ;
+    - complète avec des tags génériques de la page s'il y en a moins de 5.
+    Jamais un post ne sort avec 6 hashtags ou plus.
+    """
+    pool = list(fallback) if fallback is not None else list(_FALLBACK_HASHTAGS)
+    out: list[str] = []
+    seen: set[str] = set()
+    for tag in [*hashtags, *pool]:
+        if len(out) >= 5:
+            break
+        token = str(tag).strip().lstrip("#").strip()
+        if not token:
+            continue
+        cleaned = "#" + token
+        if cleaned.casefold() in seen:
+            continue
+        seen.add(cleaned.casefold())
+        out.append(cleaned)
+    return out[:5]
+
 TRUTH_LABELS = ["La vérité ?", "La vérité, c'est simple :", "Ce qu'il faut retenir :", "Le fond du sujet :"]
 CAPTION_CLOSERS = [
     "Le détail t'attend en commentaire 👇",
