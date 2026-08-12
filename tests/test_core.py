@@ -1,7 +1,8 @@
 from datetime import datetime
 from pathlib import Path
 
-from src.content import Content, ContentGenerator
+from src.content import HOOK_TYPES, Content, ContentGenerator, normalize_hashtags
+from src.content_declarations import DeclarationGenerator
 from src.database import HistoryDatabase
 from src.manual import generate_youtube_metadata
 from src.manual_scheduler import slot_due_now
@@ -56,6 +57,7 @@ def test_local_generator_respects_structure(tmp_path):
     assert len({item.title for item in generated}) == 180
     assert all(len(item.title.split()) <= 15 for item in generated)
     assert all(item.hashtags for item in generated)
+    assert all(len(item.hashtags) == 5 for item in generated)
     assert all(any(tag in item.comment_text for tag in item.hashtags) for item in generated)
     assert all(int(item.title.split()[0]) == len(item.points) for item in generated)
 
@@ -83,3 +85,44 @@ def test_validate_rejects_count_mismatch(tmp_path):
         assert "nombre" in str(exc).casefold()
     else:
         raise AssertionError("Devrait rejeter un nombre de points incohérent avec le titre")
+
+
+def test_normalize_hashtags_exactly_five_no_duplicates():
+    """Tronque à 5, complète à 5 et ne garde aucun doublon."""
+    out = normalize_hashtags(["#A", "#B", "#C", "#D", "#E", "#F", "#A"])
+    assert len(out) == 5
+    assert len(set(tag.casefold() for tag in out)) == 5
+    assert all(tag.startswith("#") for tag in out)
+
+
+def test_normalize_hashtags_pads_when_short():
+    out = normalize_hashtags(["#Sagesse"])
+    assert len(out) == 5
+    assert out[0] == "#Sagesse"
+
+
+def test_declarations_local_has_exactly_five_hashtags(tmp_path):
+    db = HistoryDatabase(tmp_path / "history.sqlite3")
+    gen = DeclarationGenerator(db)
+    generated = []
+    for _ in range(10):
+        declaration = gen._local({field: {item.topic.casefold() for item in generated} for field in ("title", "topic")})
+        generated.append(declaration)
+    assert all(len(item.hashtags) == 5 for item in generated)
+
+
+def test_pick_hook_type_avoids_last_used(tmp_path):
+    db = HistoryDatabase(tmp_path / "history.sqlite3")
+    generator = ContentGenerator(db)
+    seen = set()
+    for key, _ in HOOK_TYPES:
+        chosen = generator._pick_hook_type()[0]
+        assert chosen not in seen
+        seen.add(chosen)
+        db.create({
+            "created_at": datetime.now().isoformat(),
+            "pillar": "Dignité", "title": f"t{len(seen)}", "topic": f"topic-{key}",
+            "verse_reference": "Proverbes 1:1", "cta": "cta", "decor": "decor",
+            "image_prompt": "prompt", "caption": "caption", "comment_text": "comment",
+            "hashtags": "#A #B #C #D #E", "hook_type": chosen, "status": "published",
+        })

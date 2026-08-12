@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from google import genai
 
+from .content import normalize_hashtags
 from .secrets import get_secret
 
 PILLARS = [
@@ -176,8 +177,8 @@ parfois une question-réponse, parfois une petite scène de vie).
 Photos — « decor » décrit une scène premium pour l'image (jamais de personnes célèbres, pas
 de texte, pas de logos) ; « image_prompt » traduit la scène pour un générateur.
 
-HASTAGS — 4 à 6 hashtags variés selon pilier/thème, incluant toujours
-#VoixDeProspéritéEnChrist.
+HASTAGS — EXACTEMENT 5 hashtags VARIÉS selon pilier/thème, incluant toujours
+#VoixDeProspéritéEnChrist. JAMAIS plus de 5, JAMAIS moins de 5.
 
 Schéma JSON obligatoire :
 {"pillar":"", "declaration":"", "closure":"", "cta":"", "verse_reference":"Livre 0:0",
@@ -190,8 +191,8 @@ def _clean(value: str) -> str:
 
 def _build_hashtags(pillar: str, topic: str, rng: random.Random) -> list[str]:
     pool = ["#Déclaration", "#ParoleProphétique", "#Foi", "#Restauration", "#Provision"]
-    rotated = rng.sample(pool, 3)
-    return BRAND_TAGS + rotated
+    rotated = rng.sample(pool, min(len(pool), 2))
+    return normalize_hashtags(BRAND_TAGS + rotated)
 
 
 class DeclarationGenerator:
@@ -231,7 +232,10 @@ class DeclarationGenerator:
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt_text)
         raw = response.text.strip().removeprefix("```json").removesuffix("```").strip()
         data = json.loads(raw)
-        data.setdefault("hashtags", _build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))))
+        data["hashtags"] = normalize_hashtags(
+            data.get("hashtags"),
+            fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),
+        )
         content = Declaration(**{field: data[field] for field in Declaration.__dataclass_fields__})
         self._validate(content, exclusions)
         return content

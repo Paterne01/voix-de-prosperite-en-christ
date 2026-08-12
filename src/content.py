@@ -119,6 +119,7 @@ class Content:
     decor: str
     image_prompt: str
     hashtags: list[str]
+    hook_type: str = ""
 
     @staticmethod
     def _pick(variants: list[str], title: str) -> str:
@@ -186,16 +187,40 @@ affleure, reformule pour rester fidèle au pilier imposé.
 STYLE — écris en français ORAL, direct et chaleureux, comme un grand frère qui parle
 à des amis sur Facebook/WhatsApp en Afrique francophone :
 - phrases courtes, interpellations directes (« toi », « tu »), questions au lecteur ;
-- expressions simples et parlantes du quotidien, pas de prose littéraire ni de ton de cours.
+- expressions simples et parlantes du quotidien, pas de prose littéraire ni de ton de cours ;
+- rythme VARIÉ : alterne question, affirmation, scène de vie, défi — jamais deux posts
+  avec le même moule d'accroche. L'accroche (premier post) nomme une DOULEUR RÉELLE que le
+  lecteur vit (honte financière, comparaison, peur de l'échec, prières sans réponse,
+  jugement des proches, travail sans résultat visible) et le touche AVANT de lui donner
+  la solution.
+
+ACCROCHE IMPOSÉE — le champ « hook » est le premier message visible. Le type d'accroche
+est IMPOSÉ par le système (question_pain, constat_cache, contre_intuitif, identification,
+chiffre) : respecte-le ÉXACTEMENT, sans le nommer. Le hook fait 20 mots max, nomme la
+douleur du lecteur, et se termine par une question ou par un deux-points qui donne envie
+de lire la suite. Exemples par type manipulés spirituellement mais jamais accusateurs :
+- question_pain : « Tu travailles dur depuis des années et tu te demandes encore pourquoi ça ne décolle pas ? »
+- constat_cache : « Beaucoup prient pour sortir du manque, mais ont peur en secret d'y croire vraiment. »
+- contre_intuitif : « Ton blocage n'est pas ton manque d'argent : c'est ce que tu crois sur toi-même. »
 
 INTERDITS absolus — tournures de robot : « il est essentiel de », « il est important de »,
 « n'oublions pas que », « en conclusion », « en résumé », « il convient de »,
-« dans le monde d'aujourd'hui », « sans plus tarder », « en définitive ».
-Interdit aussi : cascades d'émojis, « !!! », phrases à rallonge.
+« dans le monde d'aujourd'hui », « sans plus tarder », « en définitive », « n'hésite pas à »,
+« j'espère que ». Interdit aussi : cascades d'émojis, « !!! », phrases à rallonge,
+listes numérotées dans la légende, promesses de richesse ou de guérison garantie.
 
 VARIATION — change de structure d'un post à l'autre : parfois une question d'accroche,
 parfois une affirmation directe, parfois une petite scène de vie, parfois un défi.
 Ne colle jamais le même moule (pas toujours titre-listicle, pas toujours « La vérité ? »).
+
+CTA PRÉCIS — le champ « cta » est UN appel à l'action précis, actionnable et différent
+à chaque post, jamais « partage si tu veux ». Adapte-le au contenu :
+- défi → demande une action concrète de la semaine (ex. « Écris aujourd'hui une tâche que
+  tu remets depuis des mois, accomplis-la d'ici dimanche. ») ;
+- leçon → demande une décision ou un changement à mettre en pratique ;
+- encouragement → demande de citer une personne qui a besoin de cette parole (partage ciblé) ;
+- question → pose une vraie question de réflexion à laquelle le lecteur répond en commentaire.
+2 phrases max. Aucune promesse de résultat matériel garanti.
 
 CONTENU — bibliquement responsable et pratique. Ne promets jamais richesse, guérison
 ou résultat garanti ; ne dénigre aucun groupe. Le titre fait 15 mots max, accrocheur
@@ -228,10 +253,10 @@ def _clean(value: str) -> str:
 
 
 def _build_hashtags(pillar: str, topic: str, rng: random.Random) -> list[str]:
-    """Hashtags dynamiques : base de marque + tags du pilier, tirés selon le sujet."""
+    """Hashtags dynamiques : base de marque + tags du pilier, EXACTEMENT 5."""
     pool = list(PILLAR_TAGS.get(pillar, list(PILLAR_TAGS.values())[0]))
-    rotated = rng.sample(pool, min(len(pool), 3))
-    return BRAND_TAGS + rotated
+    rotated = rng.sample(pool, min(len(pool), 2))
+    return normalize_hashtags(BRAND_TAGS + rotated)
 
 
 class ContentGenerator:
@@ -240,6 +265,7 @@ class ContentGenerator:
 
     def generate(self, prompt: str | None = None) -> Content:
         exclusions = {field: sorted(self.database.recent_values(field))[-180:] for field in ("title", "topic", "verse_reference", "cta", "decor")}
+        hook_type = self._pick_hook_type()
         key = get_secret("gemini_api_key")
         if key:
             last_exc: Exception | None = None
@@ -248,23 +274,36 @@ class ContentGenerator:
             # qu'il corrige explicitement, avant de basculer sur le brouillon local.
             for attempt in range(5):
                 try:
-                    return self._gemini(key, exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt)
+                    return self._gemini(key, exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, hook_type=hook_type)
                 except Exception as exc:
                     last_exc = exc
             # A local draft keeps testing and recovery possible; publishing still records the source in logs.
-            return self._local(exclusions, warning=str(last_exc))
-        return self._local(exclusions)
+            return self._local(exclusions, warning=str(last_exc), hook_type=hook_type)
+        return self._local(exclusions, hook_type=hook_type)
 
-    def _gemini(self, key: str, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None) -> Content:
+    def _pick_hook_type(self) -> tuple[str, str]:
+        """Type d'accroche imposé : on écarte les types récents pour éviter la répétition."""
+        recent = self.database.recent_values("hook_type")
+        pool = [(key, label) for key, label in HOOK_TYPES if key not in recent] or HOOK_TYPES
+        return random.choice(pool)
+
+    def _gemini(self, key: str, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, hook_type: tuple[str, str] | None = None) -> Content:
         pillar = random.choice(PILLARS)
+        hook_key, hook_label = hook_type or random.choice(HOOK_TYPES)
         system_prompt = prompt or SYSTEM_PROMPT
-        prompt_text = f"{system_prompt}\nPilier obligatoire : {pillar}.\nÉléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
+        prompt_text = (
+            f"{system_prompt}\nPilier obligatoire : {pillar}.\n"
+            f"Type d'accroche IMPOSÉ pour le champ \"hook\" : « {hook_label} » "
+            f"(clé : {hook_key}). Construis le hook selon ce type, sans jamais le nommer.\n"
+            f"Éléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
+        )
         if avoid:
             prompt_text += (
                 f"\nTon brouillon précédent a été rejeté pour ce motif : {avoid}.\n"
-                "Corrige-le maintenant : choisis un AUTRE verset, une autre accroche, "
-                "un autre appel à l'action, et vérifie que le nombre annoncé dans le "
-                "titre égale exactement le nombre de points. Aucun élément interdit ci-dessus."
+                "Corrige-le maintenant : choisis un AUTRE verset, une accroche du même type "
+                "mais avec une formulation différente, un autre appel à l'action, et vérifie "
+                "que le nombre annoncé dans le titre égale exactement le nombre de points. "
+                "Aucun élément interdit ci-dessus."
             )
         client = genai.Client(api_key=key)
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt_text)
@@ -274,17 +313,18 @@ class ContentGenerator:
             data.get("hashtags"),
             fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),
         )
+        data["hook_type"] = hook_key
         content = Content(**{field: data[field] for field in Content.__dataclass_fields__})
         self._validate(content, exclusions)
         return content
 
-    def _local(self, exclusions: dict[str, list[str]], warning: str | None = None) -> Content:
+    def _local(self, exclusions: dict[str, list[str]], warning: str | None = None, hook_type: tuple[str, str] | None = None) -> Content:
         """Deterministic no-API fallback intended for setup, tests and quota recovery."""
         index = len(exclusions["title"]) + 1
         last_error = warning or "générateur local"
         for _ in range(200):
             try:
-                content = self._build_local(index)
+                content = self._build_local(index, hook_type=hook_type)
                 self._validate(content, exclusions)
                 return content
             except ValueError as exc:
@@ -292,7 +332,7 @@ class ContentGenerator:
                 index += 1
         raise ValueError(f"Impossible de générer un contenu unique après 200 essais : {last_error}")
 
-    def _build_local(self, index: int) -> Content:
+    def _build_local(self, index: int, hook_type: tuple[str, str] | None = None) -> Content:
         pillar = PILLARS[index % len(PILLARS)]
         themes = ["discipline fidèle", "vision de long terme", "gestion responsable", "paix dans les décisions", "service qui crée de la valeur", "générosité intentionnelle", "courage dans l'action"]
         theme = themes[index % len(themes)]
@@ -306,8 +346,16 @@ class ContentGenerator:
             {"heading": heading, "body": body, "application": application}
             for heading, body, application in LOCAL_POINTS[offset:offset + count]
         ]
+        hook_key, hook_label = hook_type or ("question_pain", "Une question qui fait mal")
+        hooks = {
+            "question_pain": f"Tu travailles dur sur {theme} depuis des années, et pourtant tu te demandes encore pourquoi ça ne décolle pas ?",
+            "constat_cache": f"Beaucoup prient pour avancer sur {theme}, mais ont peur en secret d'y croire vraiment.",
+            "contre_intuitif": f"Ce n'est pas ton manque de résultat sur {theme} qui te bloque : c'est ce que tu crois sur toi-même.",
+            "identification": f"Si tu as déjà eu honte de ton retard sur {theme}, ce post est pour toi.",
+            "chiffre": f"Des milliers de personnes abandonnent chaque année sur {theme} à cause d'une seule croyance limitante.",
+        }
         return Content(
-            pillar=pillar, title=title, hook="(Une fidélité discrète peut transformer ta manière d'avancer.)",
+            pillar=pillar, title=title, hook=hooks.get(hook_key, hooks["question_pain"]),
             topic=topic, verse_reference=f"Proverbes {(index % 31) + 1}:{(index // 31) + 1}",
             decor=["bureau élégant baigné de lumière dorée", "bibliothèque bleu marine et or", "montagnes majestueuses au lever du jour"][index % 3] + f", composition {index}",
             image_prompt="Scène éditoriale premium bleu marine et or, lumière naturelle, aucun texte, aucune marque.",
@@ -315,6 +363,7 @@ class ContentGenerator:
             truth="Dieu ne mesure pas seulement ce que tu possèdes, mais ce que ta fidélité produit dans ta vie et autour de toi.",
             cta=f"Quel point veux-tu appliquer cette semaine ? Écris-le en commentaire. ({index})",
             hashtags=_build_hashtags(pillar, topic, random.Random(topic)),
+            hook_type=hook_key,
         )
 
     def _validate(self, content: Content, exclusions: dict[str, list[str]]) -> None:

@@ -95,6 +95,7 @@ class PublicationService:
             "format": format,
             "format_name": format_name,
             "background": background,
+            "hook_type": getattr(content, "hook_type", "") or None,
         }
 
     # ── prepare ──────────────────────────────────────────────────────

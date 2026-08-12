@@ -70,6 +70,7 @@ class HistoryDatabase:
                 "youtube_video_id", "youtube_url", "youtube_comment_id", "youtube_comment_url",
                 "tiktok_publish_id", "tiktok_url",
                 "format", "background", "format_name", "source_filename",
+                "hook_type", "engagement_score",
             ):
                 try:
                     conn.execute(f"ALTER TABLE publications ADD COLUMN {col} TEXT")
@@ -77,7 +78,7 @@ class HistoryDatabase:
                     pass
 
     def recent_values(self, column: str, days: int = 90) -> set[str]:
-        allowed = {"title", "topic", "verse_reference", "cta", "decor"}
+        allowed = {"title", "topic", "verse_reference", "cta", "decor", "hook_type"}
         if column not in allowed:
             raise ValueError("Colonne non autorisée")
         cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
@@ -119,6 +120,7 @@ class HistoryDatabase:
             "facebook_url", "youtube_video_id", "youtube_url", "youtube_comment_id", "youtube_comment_url",
             "tiktok_publish_id", "tiktok_url",
             "status", "error", "format", "background", "format_name", "source_filename",
+            "hook_type",
         ]
         values = [record.get(field) for field in fields]
         with self.connect() as conn:
