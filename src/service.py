@@ -372,12 +372,29 @@ class PublicationService:
 
         videos_dir = absolute_path(self.config["paths"].get("videos", "Videos"))
         max_duration = SHORT_DURATION.get(format, 60)
+        intro = self._active_overlay_file("intro", format)
+        outro = self._active_overlay_file("outro", format)
+        watermark = self._active_overlay_file("watermark", format)
         if background_video and overlay_path:
             return build_short_video_from_video(
                 background_video, overlay_path, audio,
                 output_dir=videos_dir, max_duration=max_duration,
+                intro_path=intro, outro_path=outro, watermark_path=watermark,
             )
-        return build_short_video(image_path, audio, output_dir=videos_dir, max_duration=max_duration)
+        return build_short_video(
+            image_path, audio, output_dir=videos_dir, max_duration=max_duration,
+            intro_path=intro, outro_path=outro, watermark_path=watermark,
+        )
+
+    def _active_overlay_file(self, overlay_type: str, format: str) -> str | None:
+        """Chemin du fichier du dernier overlay actif du type, ou None."""
+        try:
+            row = self.database.single_active_overlay(overlay_type, format)
+        except Exception:
+            return None
+        if not row:
+            return None
+        return row.get("file_path") or None
 
     # ── TikTok (Direct Post, format vidéo uniquement) ─────────────────
 

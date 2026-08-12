@@ -345,6 +345,11 @@ class HistoryDatabase:
             rows = conn.execute(sql, params).fetchall()
         return [dict(row) for row in rows]
 
+    def single_active_overlay(self, overlay_type: str, format: str | None = None) -> dict | None:
+        """Le plus récent overlay actif du type, ou None si aucun."""
+        rows = self.active_overlays(overlay_type=overlay_type, format=format)
+        return rows[-1] if rows else None
+
     def seed_default_formats(self, schedule: list[str]) -> None:
         """Crée les deux formats par défaut si la table est vide (migration)."""
         with self.connect() as conn:
