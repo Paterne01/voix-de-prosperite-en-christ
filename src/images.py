@@ -106,7 +106,60 @@ class ImageService:
 
     def _local(self, content, *, background: str | None = None, format: str = "video") -> Path:
         image = self._fallback_background(background)
-        return self._save(self._brand(image, content, format))
+        image = self._brand(image, content, format)
+        image = self._draw_image_text_overlay(image, format)
+        return self._save(image)
+
+    def _draw_image_text_overlay(self, image: Image.Image, format: str) -> Image.Image:
+        """Bandeau de texte actif (overlay image_text) dessiné en bas de l'image.
+
+        Appliqué UNIQUEMENT à l'image publiée (pas au calque vidéo transparent).
+        Se termine au-dessus de la zone du logo (env. 140 px en bas). Si plusieurs
+        bandeaux actifs conviennent au format, seul le plus récent est dessiné
+        (garde-fou anti-empilement). Renvoie l'image composée.
+        """
+        overlay = self._active_text_banner(format)
+        if not overlay:
+            return image
+        text = str(overlay.get("text_content") or "").strip()
+        if not text:
+            return image
+        layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        fitted = fit_text_block(
+            draw, text, _font_path(True),
+            box_width=960, box_height=120, max_font_size=44, min_font_size=26,
+        )
+        banner_h = max(90, fitted.line_height * len(fitted.lines) + 28)
+        y_top = H - banner_h - 140
+        draw.rectangle((0, y_top, W, H), fill=(7, 26, 54, 235))
+        ty = y_top + (banner_h - fitted.line_height * len(fitted.lines)) // 2
+        for line in fitted.lines:
+            draw.text(((W - ImageService._text_width(draw, line, fitted.font)) // 2, ty), line, font=fitted.font, fill="#f7ead0")
+            ty += fitted.line_height
+        return Image.alpha_composite(image.convert("RGBA"), layer).convert("RGB")
+
+    @staticmethod
+    def _text_width(draw: ImageDraw.ImageDraw, text: str, font) -> int:
+        try:
+            return draw.textbbox((0, 0), text, font=font)[2]
+        except TypeError:
+            return draw.textlength(text, font=font)
+
+    def _active_text_banner(self, format: str) -> dict | None:
+        """Overlay image_text actif pour ce format (le plus récent)."""
+        overlays = self._overlays(format, "image_text")
+        return overlays[-1] if overlays else None
+
+    def _overlays(self, format: str, overlay_type: str) -> list[dict]:
+        try:
+            from .config import absolute_path
+            from .database import HistoryDatabase
+
+            db = HistoryDatabase(absolute_path(self.config["paths"]["database"]))
+            return db.active_overlays(overlay_type, format)
+        except Exception:
+            return []
 
     def _fallback_background(self, background: str | None) -> Image.Image:
         """Fond d'image utilisable : ignore les vidéos (traitées dans video.py)."""

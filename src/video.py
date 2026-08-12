@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -7,17 +8,30 @@ from .config import ROOT
 
 SHORTS_MAX_SECONDS = 60
 
+# Coins possibles pour le watermark texte.
+_WATERMARK_POSITIONS = {
+    "bottom-right": "(w-tw-40):(h-th-40)",
+    "bottom-left": "40:(h-th-40)",
+    "top-right": "(w-tw-40):40",
+    "top-left": "40:40",
+}
+
 
 def build_short_video(
     image_path: str | Path,
     audio_path: str | Path,
     output_dir: str | Path | None = None,
     max_duration: int = SHORTS_MAX_SECONDS,
+    intro_path: str | Path | None = None,
+    outro_path: str | Path | None = None,
+    watermark_path: str | Path | None = None,
+    watermark_text: str | None = None,
 ) -> Path:
     """Build a YouTube Short (1080×1920, max 60 s) from a still image + audio.
 
-    Utilisé pour les fonds IMAGE : Ken Burns simple (image animée) par boucle
-    d'image + audio. Les fonds vidéo passent par build_short_video_from_video().
+    Phase 1 : image animée (boucle) + audio, avec le watermark (image PNG ou
+    texte drawtext) gravé dedans. Phase 2 : intro/outro (clips vidéo) ajoutés
+    par concat, l'ensemble restant borné à max_duration.
     """
     image, audio = Path(image_path), Path(audio_path)
     if not image.exists():
@@ -30,24 +44,40 @@ def build_short_video(
     ) / f"short_{image.stem}.mp4"
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    # -loop 1 répète l'image ; -t coupe le tout à max_duration.
+    wm = watermark_to_path(watermark_path) if watermark_path else None
+
+    # ── Phase 1 : le short de base (sans intro/outro) ────────────────
+    vf = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"
+    if wm is not None:
+        vf += _wm_image_chain(1)
+    if watermark_text:
+        vf += _wm_text_chain(watermark_text, 2 if wm is not None else 1)
+    vf += ",format=yuv420p"
+
     cmd = [
-        "ffmpeg",
-        "-y",
-        "-loop", "1",
-        "-i", str(image),
+        "ffmpeg", "-y",
+        "-loop", "1", "-i", str(image),
         "-i", str(audio),
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "28",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p",
+        *(["-i", str(wm)] if wm is not None else []),
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
+        "-c:a", "aac", "-b:a", "128k",
+        "-vf", vf,
         "-t", str(max_duration),
         "-movflags", "+faststart",
         str(output),
     ]
     _run(cmd)
+
+    # ── Phase 2 : intro / outro par concat ───────────────────────────
+    pieces = []
+    if intro_path:
+        pieces.append(("intro", Path(intro_path)))
+    pieces.append(("main", output))
+    if outro_path:
+        pieces.append(("outro", Path(outro_path)))
+    if len(pieces) == 1:
+        return output
+    _concat_with_overlays(pieces, output, max_duration=max_duration)
     return output
 
 
@@ -57,12 +87,14 @@ def build_short_video_from_video(
     audio_path: str | Path,
     output_dir: str | Path | None = None,
     max_duration: int = SHORTS_MAX_SECONDS,
+    intro_path: str | Path | None = None,
+    outro_path: str | Path | None = None,
+    watermark_path: str | Path | None = None,
+    watermark_text: str | None = None,
 ) -> Path:
     """Short 1080×1920 depuis un fond VIDÉO bouclé + calque texte (PNG transparent).
 
-    La vidéo fond est mise en boucle (-stream_loop -1) si elle est plus courte
-    que la durée cible, puis rognée en 9:16 ; le calque (titre/CTA/logo) est
-    superposé par-dessus ; l'audio est mixé en fond.
+    Idem build_short_video : gravure du watermark puis concat intro/outro.
     """
     bg, overlay, audio = Path(background_video), Path(overlay_path), Path(audio_path)
     if not bg.exists():
@@ -77,98 +109,90 @@ def build_short_video_from_video(
     ) / f"short_{bg.stem}.mp4"
     output.parent.mkdir(parents=True, exist_ok=True)
 
+    wm = watermark_to_path(watermark_path) if watermark_path else None
+
+    chain = (
+        "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
+        "crop=1080:1920,format=yuv420p[v0];"
+        "[1:v]scale=1080:1920[ov];"
+        "[v0][ov]overlay=0:0:format=auto[vb]"
+    )
+    n_wm = 0
+    if wm is not None:
+        n_wm = 1
+        chain += _wm_image_chain(2, prev_label="vb")  # input 2 = watermark
+    if watermark_text:
+        n_wm += 1
+        chain += _wm_text_chain(watermark_text, n_wm, prev_label=("vb" if wm is None else "v_wm"))
+    chain += _wm_out_to_vlabel(n_wm, "vb")
+
     cmd = [
-        "ffmpeg",
-        "-y",
-        "-stream_loop", "-1",
-        "-i", str(bg),
+        "ffmpeg", "-y",
+        "-stream_loop", "-1", "-i", str(bg),
         "-i", str(overlay),
         "-i", str(audio),
-        "-filter_complex",
-        (
-            "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
-            "crop=1080:1920,format=yuv420p[v0];"
-            "[1:v]scale=1080:1920[ov];"
-            "[v0][ov]overlay=0:0:format=auto[v]"
-        ),
-        "-map", "[v]",
+        *(["-i", str(wm)] if wm is not None else []),
+        "-filter_complex", chain,
         "-map", "2:a",
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "28",
-        "-c:a", "aac",
-        "-b:a", "128k",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
+        "-c:a", "aac", "-b:a", "128k",
         "-t", str(max_duration),
         "-movflags", "+faststart",
         str(output),
     ]
     _run(cmd)
+
+    pieces = []
+    if intro_path:
+        pieces.append(("intro", Path(intro_path)))
+    pieces.append(("main", output))
+    if outro_path:
+        pieces.append(("outro", Path(outro_path)))
+    if len(pieces) == 1:
+        return output
+    _concat_with_overlays(pieces, output, max_duration=max_duration)
     return output
 
 
-def crop_to_short(
-    input_video: str | Path,
-    output_dir: str | Path | None = None,
-    max_duration: int = SHORTS_MAX_SECONDS,
-) -> Path:
-    """Recadre une vidéo existante en Short 9:16 (1080×1920), son original conservé.
+# ── helpers watermark / concat ──────────────────────────────────────
 
-    Si la vidéo source est déjà 9:16 elle est simplement transcodée ; sinon elle
-    est rognée (crop) au centre. L'audio est conservé s'il existe, sinon un
-    silence est ajouté pour que le fichier reste lisible partout.
-    """
-    src = Path(input_video)
-    if not src.exists():
-        raise FileNotFoundError(f"Vidéo introuvable : {src}")
-    output = (
-        Path(output_dir) if output_dir else ROOT / "Videos"
-    ) / f"short_cropped_{src.stem}.mp4"
-    output.parent.mkdir(parents=True, exist_ok=True)
 
-    probe = subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "a:0",
-         "-show_entries", "stream=index", "-of", "csv=p=0", str(src)],
-        capture_output=True, text=True,
+def watermark_to_path(value: str | Path) -> Path:
+    """Fichier watermark : chemin relatif résolu depuis la racine du projet."""
+    p = Path(value)
+    if p.exists():
+        return p
+    resolved = ROOT / p
+    return resolved
+
+
+def _wm_text_chain(text: str, label: int, prev_label: str = "v") -> str:
+    escaped = (
+        text.replace("\\", "\\\\")
+        .replace(":", "\\:")
+        .replace("'", "\\'")
+        .replace(",", "\\,")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
     )
-    has_audio = bool(probe.stdout.strip())
-
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-i", str(src),
-    ]
-    audio_inputs = []
-    if has_audio:
-        audio_inputs = ["-map", "0:a:0?", "-c:a", "aac", "-b:a", "128k"]
-    else:
-        cmd += ["-f", "lavfi", "-t", str(max_duration), "-i", "anullsrc=r=44100:cl=stereo"]
-        audio_inputs = ["-map", "1:a", "-c:a", "aac", "-b:a", "128k"]
-    cmd += [
-        "-filter_complex",
-        "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
-        "crop=1080:1920,format=yuv420p,setpts=PTS-STARTPTS[v]",
-        "-map", "[v]",
-        *audio_inputs,
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "28",
-        "-t", str(max_duration),
-        "-movflags", "+faststart",
-        str(output),
-    ]
-    _run(cmd)
-    return output
+    pos = _WATERMARK_POSITIONS["bottom-right"]
+    return (
+        f";[{prev_label}]drawtext=text='{escaped}':fontsize=34:fontcolor=white@0.55:"
+        f"x={pos},setpts=PTS-STARTPTS,format=yuv420p[v{label}]"
+    )
 
 
-def _run(cmd: list[str]) -> None:
-    try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=300)
-    except FileNotFoundError as exc:
-        raise RuntimeError(
-            "ffmpeg introuvable. Installez-le via winget install Gyan.FFmpeg "
-            "ou https://ffmpeg.org et ajoutez-le au PATH."
-        ) from exc
-    except subprocess.CalledProcessError as exc:
-        raise RuntimeError(
-            f"ffmpeg a échoué (code {exc.returncode}) : {exc.stderr}"
-        ) from exc
+def _wm_image_chain(label: int, prev_label: str = "v") -> str:
+    """Superpose une image watermark (label=index d'entrée ffmpeg) en bas-droit."""
+    return (
+        f";[{label}:v]scale=w=180:h=-1:force_original_aspect_ratio=decrease,"
+        f"format=rgba[wm{label}];"
+        f"[{prev_label}][wm{label}]overlay=W-w-40:H-h-40:format=auto[v_wm{label}]"
+    )
+
+
+def _wm_out_to_vlabel(n_wm: int, base_label: str) -> str:
+    """Dernier label produit par les watermark (ou le label de base si aucun)."""
+    if n_wm == 0:
+        return ""
+    return f"[v_wm{n_wm}]"
