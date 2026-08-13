@@ -126,3 +126,60 @@ def test_pick_hook_type_avoids_last_used(tmp_path):
             "image_prompt": "prompt", "caption": "caption", "comment_text": "comment",
             "hashtags": "#A #B #C #D #E", "hook_type": chosen, "status": "published",
         })
+
+
+def test_overlay_duration_parses_json_or_default():
+    from src.service import _overlay_duration
+    assert _overlay_duration(None) == 3
+    assert _overlay_duration("") == 3
+    assert _overlay_duration('{"duration": 5}') == 5
+    assert _overlay_duration('{"duration": 2}', default=3) == 2
+    assert _overlay_duration("pas du json", default=2) == 2
+    assert _overlay_duration('{"x": 1}', default=2) == 2
+
+
+def test_is_image_and_video_file_detection():
+    from pathlib import Path
+    from src.video import _is_image_file, _is_video_file
+    assert _is_image_file(Path("a.PNG"))
+    assert _is_image_file(Path("a.jpg"))
+    assert _is_image_file(Path("a.jpeg"))
+    assert _is_image_file(Path("a.webp"))
+    assert not _is_image_file(Path("a.mp4"))
+    assert _is_video_file(Path("a.MP4"))
+    assert _is_video_file(Path("a.mov"))
+    assert _is_video_file(Path("a.webm"))
+    assert _is_video_file(Path("a.avi"))
+    assert not _is_video_file(Path("a.png"))
+
+
+def test_image_intro_outro_converted_and_cleaned(tmp_path):
+    """Une intro/outro IMAGE devient un clip vidéo ; les fichiers tmp sont purgés."""
+    import json
+    import subprocess
+    from PIL import Image
+    from src.video import build_short_video, _probe_duration, _has_audio
+
+    main = tmp_path / "main.jpg"
+    Image.new("RGB", (1080, 1920), (18, 42, 70)).save(main)
+    audio = tmp_path / "audio.m4a"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=6",
+         "-af", "volume=0.3", "-c:a", "aac", str(audio)],
+        check=True, capture_output=True,
+    )
+    intro = tmp_path / "intro.png"
+    Image.new("RGB", (500, 900), (200, 30, 30)).save(intro)
+    outro = tmp_path / "outro.jpg"
+    Image.new("RGB", (300, 600), (30, 200, 30)).save(outro)
+
+    out = build_short_video(
+        main, audio, output_dir=tmp_path, max_duration=10,
+        intro_path=intro, outro_path=outro,
+        intro_duration=3, outro_duration=4,
+    )
+    assert out.exists() and out.stat().st_size > 10_000
+    assert _probe_duration(out) <= 10.5
+    assert _has_audio(out)
+    leftovers = [p.name for p in tmp_path.iterdir() if p.name.startswith("tmp_")]
+    assert not leftovers, f"clips temporaires non purgés : {leftovers}"

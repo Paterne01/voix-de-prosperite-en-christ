@@ -30,4 +30,6 @@ document.querySelectorAll('.ov-form').forEach(f=>f.onsubmit=async e=>{e.preventD
 document.querySelectorAll('.io-form').forEach(f=>{const file=f.querySelector('input[type=file]');file.addEventListener('change',()=>{const name=(file.files[0]||{}).name||'';const isImg=IMG_RE.test(name);f.querySelector('.dur-field').hidden=!isImg})})
 function hideDur(f){const h=f.querySelector('.dur-field');if(h)h.hidden=true}
 async function toggle(id,active){const fd=new FormData();fd.append('active',active?'on':'');const d=await api('/api/overlays/'+id+'/toggle',{method:'POST',body:fd});location.reload()}
-async function remove(id){if(!confirm('Supprimer cet overlay ?'))return;const d=await api
+async function remove(id){if(!confirm('Supprimer cet overlay ?'))return;const d=await api('/api/overlays/'+id+'/delete',{method:'POST'});refresh()}
+refresh();
+</script></body></html>
