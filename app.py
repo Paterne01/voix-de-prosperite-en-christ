@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -112,8 +113,19 @@ def create_overlay():
         file = request.files.get("file")
         if not file or not file.filename:
             return jsonify(ok=False, error=f"Un fichier vidéo est requis pour un overlay « {overlay_type} »."), 400
+        ext = Path(file.filename).suffix.lower()
+        allowed = _overlay_allowed_extensions(overlay_type)
+        if ext not in allowed:
+            return jsonify(
+                ok=False,
+                error=f"Type « {ext or 'inconnu'} » refusé pour un overlay « {overlay_type} ». "
+                      f"Formats acceptés : {', '.join(sorted(allowed))}.",
+            ), 400
         target = _save_overlay_file(file)
         params["file_path"] = str(target)
+        # Intro/outro IMAGE : on mémorise la durée d'affichage via text_content.
+        if overlay_type in ("intro", "outro") and ext in _OVERLAY_IMAGE_EXTS:
+            params["text_content"] = json.dumps({"duration": _overlay_duration_from_form()})
     elif overlay_type == "image_text" and not params["text_content"]:
         return jsonify(ok=False, error="Le texte de la banderole est requis."), 400
     overlay_id = db.create_overlay(**params)
@@ -133,7 +145,17 @@ def update_overlay(overlay_id: int):
     if overlay_type in ("intro", "outro", "watermark"):
         file = request.files.get("file")
         if file and file.filename:
+            ext = Path(file.filename).suffix.lower()
+            allowed = _overlay_allowed_extensions(overlay_type)
+            if ext not in allowed:
+                return jsonify(
+                    ok=False,
+                    error=f"Type « {ext or 'inconnu'} » refusé pour un overlay « {overlay_type} ». "
+                          f"Formats acceptés : {', '.join(sorted(allowed))}.",
+                ), 400
             params["file_path"] = str(_save_overlay_file(file))
+            if overlay_type in ("intro", "outro") and ext in _OVERLAY_IMAGE_EXTS:
+                params["text_content"] = json.dumps({"duration": _overlay_duration_from_form()})
     elif overlay_type == "image_text" and not params["text_content"]:
         return jsonify(ok=False, error="Le texte de la banderole est requis."), 400
     db.update_overlay(overlay_id, **params)
@@ -203,6 +225,30 @@ def _save_overlay_file(file) -> Path:
     target = _overlay_dir() / f"{datetime.now():%Y%m%d_%H%M%S}_{safe_name}"
     file.save(target)
     return target
+
+
+# Intro/outro acceptent vidéos ET images (une image est convertie en clip fixe).
+_OVERLAY_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+_OVERLAY_VIDEO_EXTS = {".mp4", ".mov", ".webm", ".avi"}
+# Watermark : vidéo OU image (fond transparent conseillé).
+_OVERLAY_WATERMARK_EXTS = _OVERLAY_VIDEO_EXTS | _OVERLAY_IMAGE_EXTS
+
+
+def _overlay_allowed_extensions(overlay_type: str) -> set[str]:
+    if overlay_type in ("intro", "outro"):
+        return _OVERLAY_VIDEO_EXTS | _OVERLAY_IMAGE_EXTS
+    if overlay_type == "watermark":
+        return _OVERLAY_WATERMARK_EXTS
+    return set()
+
+
+def _overlay_duration_from_form() -> int:
+    """Durée d'affichage choisie dans le formulaire (2/3/4/5 s, défaut 3)."""
+    try:
+        value = int(request.form.get("duration", "3"))
+    except (TypeError, ValueError):
+        return 3
+    return value if value in (2, 3, 4, 5) else 3
 
 
 @app.post("/api/formats")

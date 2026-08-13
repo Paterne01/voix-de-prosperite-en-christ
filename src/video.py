@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -17,6 +18,18 @@ _WM_Y = "H-h-40"
 # Taille cible du watermark PNG rendu depuis le texte.
 _WM_CANVAS = 560, 140
 
+# Extensions acceptées pour les clips intro/outro.
+_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+_VIDEO_EXTS = {".mp4", ".mov", ".webm", ".avi"}
+
+
+def _is_image_file(path: Path) -> bool:
+    return path.suffix.lower() in _IMAGE_EXTS
+
+
+def _is_video_file(path: Path) -> bool:
+    return path.suffix.lower() in _VIDEO_EXTS
+
 
 def build_short_video(
     image_path: str | Path,
@@ -27,12 +40,15 @@ def build_short_video(
     outro_path: str | Path | None = None,
     watermark_path: str | Path | None = None,
     watermark_text: str | None = None,
+    intro_duration: int = 3,
+    outro_duration: int = 3,
 ) -> Path:
     """Build a YouTube Short (1080×1920, max 60 s) from a still image + audio.
 
     Phase 1 : image animée (boucle Ken Burns) + audio, watermark (image PNG ou
     texte gravé via PIL) superposé en bas-droit. Phase 2 : intro/outro (clips
-    vidéo) concaténés, l'ensemble restant borné à max_duration.
+    vidéo OU images, converties en clip fixe de intro_duration/outro_duration s)
+    concaténés, l'ensemble restant borné à max_duration.
     """
     image, audio = Path(image_path), Path(audio_path)
     if not image.exists():
@@ -69,13 +85,25 @@ def build_short_video(
     ]
     _run(cmd)
 
-    pieces = [("main", output)]
-    if intro_path:
-        pieces.insert(0, ("intro", Path(intro_path)))
-    if outro_path:
-        pieces.append(("outro", Path(outro_path)))
-    if len(pieces) > 1:
-        _concat_pieces(pieces, output, max_duration=max_duration)
+    intro_piece, outro_piece, temp_clips = _intro_outro_pieces(
+        intro_path, outro_path, output_dir_p,
+        intro_duration=intro_duration, outro_duration=outro_duration,
+    )
+    pieces: list[tuple[str, Path]] = []
+    if intro_piece:
+        pieces.append(("intro", intro_piece))
+    pieces.append(("main", output))
+    if outro_piece:
+        pieces.append(("outro", outro_piece))
+    try:
+        if len(pieces) > 1:
+            _concat_pieces(pieces, output, max_duration=max_duration)
+    finally:
+        for clip in temp_clips:
+            try:
+                clip.unlink(missing_ok=True)
+            except OSError:
+                pass
     return output
 
 
@@ -89,10 +117,13 @@ def build_short_video_from_video(
     outro_path: str | Path | None = None,
     watermark_path: str | Path | None = None,
     watermark_text: str | None = None,
+    intro_duration: int = 3,
+    outro_duration: int = 3,
 ) -> Path:
     """Short 1080×1920 depuis un fond VIDÉO bouclé + calque texte (PNG transparent).
 
-    Idem build_short_video : gravure du watermark puis concat intro/outro.
+    Idem build_short_video : gravure du watermark puis concat intro/outro
+    (vidéos ou images converties en clip fixe).
     """
     bg, overlay, audio = Path(background_video), Path(overlay_path), Path(audio_path)
     if not bg.exists():
@@ -136,13 +167,25 @@ def build_short_video_from_video(
     ]
     _run(cmd)
 
-    pieces = [("main", output)]
-    if intro_path:
-        pieces.insert(0, ("intro", Path(intro_path)))
-    if outro_path:
-        pieces.append(("outro", Path(outro_path)))
-    if len(pieces) > 1:
-        _concat_pieces(pieces, output, max_duration=max_duration)
+    intro_piece, outro_piece, temp_clips = _intro_outro_pieces(
+        intro_path, outro_path, output_dir_p,
+        intro_duration=intro_duration, outro_duration=outro_duration,
+    )
+    pieces: list[tuple[str, Path]] = []
+    if intro_piece:
+        pieces.append(("intro", intro_piece))
+    pieces.append(("main", output))
+    if outro_piece:
+        pieces.append(("outro", outro_piece))
+    try:
+        if len(pieces) > 1:
+            _concat_pieces(pieces, output, max_duration=max_duration)
+    finally:
+        for clip in temp_clips:
+            try:
+                clip.unlink(missing_ok=True)
+            except OSError:
+                pass
     return output
 
 
@@ -209,6 +252,81 @@ def _render_text_watermark(text: str) -> Path | None:
         return tmp
     except Exception:
         return None
+
+
+def _intro_outro_pieces(
+    intro_path: str | Path | None,
+    outro_path: str | Path | None,
+    output_dir: Path,
+    intro_duration: int = 3,
+    outro_duration: int = 3,
+) -> tuple[Path | None, Path | None, list[Path]]:
+    """Prépare les morceaux intro/outro avant concaténation.
+
+    Un fichier IMAGE est d'abord converti en clip vidéo fixe (durée configurable)
+    dans output_dir ; le clip temporaire est renvoyé dans temp_clips pour être
+    supprimé après la concaténation (try/finally chez l'appelant). Un fichier
+    vidéo est utilisé tel quel (comportement existant inchangé).
+    """
+    intro_piece, outro_piece = None, None
+    temp_clips: list[Path] = []
+    if intro_path:
+        p = Path(intro_path)
+        if _is_image_file(p):
+            clip = _tmp_image_clip_path(output_dir, "intro")
+            _image_to_clip(p, clip, duration_seconds=intro_duration)
+            temp_clips.append(clip)
+            intro_piece = clip
+        else:
+            intro_piece = p
+    if outro_path:
+        p = Path(outro_path)
+        if _is_image_file(p):
+            clip = _tmp_image_clip_path(output_dir, "outro")
+            _image_to_clip(p, clip, duration_seconds=outro_duration)
+            temp_clips.append(clip)
+            outro_piece = clip
+        else:
+            outro_piece = p
+    return intro_piece, outro_piece, temp_clips
+
+
+def _tmp_image_clip_path(output_dir: Path, kind: str) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir / f"tmp_{kind}_{uuid.uuid4().hex[:8]}.mp4"
+
+
+def _image_to_clip(
+    image_path: Path,
+    output_path: Path,
+    duration_seconds: int = 3,
+    width: int = 1080,
+    height: int = 1920,
+    fps: int = 30,
+) -> Path:
+    """Convertit une image fixe en clip vidéo court (1080x1920).
+
+    Fond noir si l'image ne remplit pas le cadre (pad, jamais de distorsion ni
+    de crop), codec H.264, audio silencieux inclus pour que la concaténation
+    ffmpeg ne plante pas sur un flux audio manquant. Durée par défaut : 3 s.
+    """
+    cmd = [
+        "ffmpeg", "-y",
+        "-loop", "1", "-i", str(image_path),
+        "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+        "-vf",
+        f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black",
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-t", str(duration_seconds),
+        "-r", str(fps),
+        str(output_path),
+    ]
+    _run(cmd)
+    return output_path
 
 
 def _video_pad_chain(label: str = "v0") -> list[str]:

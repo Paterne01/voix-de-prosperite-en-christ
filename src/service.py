@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import random
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +21,28 @@ FORMATS = ("video", "declaration")
 
 # Durée cible des Shorts selon le format (déclaration = texte court : 20-25 s).
 SHORT_DURATION = {"declaration": 22, "video": 60}
+
+
+def _overlay_duration(text_content: str | None, default: int = 3) -> int:
+    """Durée d'affichage d'un overlay image, depuis son text_content JSON.
+
+    text_content = '{"duration": 5}' pour un intro/outro IMAGE (voir /overlays).
+    Tout format invalide renvoie la valeur par défaut (comportement inchangé
+    pour les overlays vidéo, dont text_content est vide).
+    """
+    if not text_content:
+        return default
+    try:
+        data = json.loads(text_content)
+    except (json.JSONDecodeError, TypeError):
+        return default
+    if not isinstance(data, dict):
+        return default
+    try:
+        duration = int(data.get("duration", default))
+    except (TypeError, ValueError):
+        return default
+    return duration if duration >= 1 else default
 
 
 class PreparedPost(NamedTuple):
@@ -375,26 +398,40 @@ class PublicationService:
         intro = self._active_overlay_file("intro", format)
         outro = self._active_overlay_file("outro", format)
         watermark = self._active_overlay_file("watermark", format)
+        intro_duration = _overlay_duration(self._active_overlay_text("intro", format), default=3)
+        outro_duration = _overlay_duration(self._active_overlay_text("outro", format), default=3)
         if background_video and overlay_path:
             return build_short_video_from_video(
                 background_video, overlay_path, audio,
                 output_dir=videos_dir, max_duration=max_duration,
                 intro_path=intro, outro_path=outro, watermark_path=watermark,
+                intro_duration=intro_duration, outro_duration=outro_duration,
             )
         return build_short_video(
             image_path, audio, output_dir=videos_dir, max_duration=max_duration,
             intro_path=intro, outro_path=outro, watermark_path=watermark,
+            intro_duration=intro_duration, outro_duration=outro_duration,
         )
 
     def _active_overlay_file(self, overlay_type: str, format: str) -> str | None:
         """Chemin du fichier du dernier overlay actif du type, ou None."""
-        try:
-            row = self.database.single_active_overlay(overlay_type, format)
-        except Exception:
-            return None
+        row = self._active_overlay_row(overlay_type, format)
         if not row:
             return None
         return row.get("file_path") or None
+
+    def _active_overlay_text(self, overlay_type: str, format: str) -> str | None:
+        """text_content du dernier overlay actif du type, ou None."""
+        row = self._active_overlay_row(overlay_type, format)
+        if not row:
+            return None
+        return row.get("text_content") or None
+
+    def _active_overlay_row(self, overlay_type: str, format: str) -> dict | None:
+        try:
+            return self.database.single_active_overlay(overlay_type, format)
+        except Exception:
+            return None
 
     # ── TikTok (Direct Post, format vidéo uniquement) ─────────────────
 
