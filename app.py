@@ -561,6 +561,32 @@ def cancel_publication(publication_id: int):
     return jsonify(ok=True)
 
 
+# ── Rattrapage Facebook seul ─────────────────────────────────────────
+# Republie UNIQUEMENT sur Facebook les publications du jour qui ont manqué
+# Facebook (jeton invalide au moment du post). YouTube/TikTok ne sont pas
+# re-contactés : aucun doublon. Sans publication_id, cible automatiquement
+# toutes les publications du jour manquantes côté Facebook.
+
+@app.post("/api/republish-facebook")
+def republish_facebook():
+    dry_run = request.form.get("dry_run") == "on" or request.args.get("dry_run") == "1"
+    try:
+        result = service().republish_facebook(dry_run=dry_run)
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)), 502
+    return jsonify(result)
+
+
+@app.post("/api/publications/<int:publication_id>/republish-facebook")
+def republish_facebook_one(publication_id: int):
+    dry_run = request.form.get("dry_run") == "on" or request.args.get("dry_run") == "1"
+    try:
+        result = service().republish_facebook(publication_id, dry_run=dry_run)
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)), 502
+    return jsonify(result)
+
+
 if __name__ == "__main__":
     from src.scheduler_log import log_run
 

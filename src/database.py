@@ -186,6 +186,19 @@ class HistoryDatabase:
             ).fetchone()
         return row is None
 
+    def missing_facebook_today(self) -> list[dict]:
+        """Publications du jour déjà publiées ailleurs (YT/TikTok) mais SANS
+        post Facebook : cibles du rattrapage Facebook seul."""
+        today = datetime.now().date().isoformat()
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM publications WHERE scheduled_for LIKE ? "
+                "AND facebook_post_id IS NULL "
+                "AND status IN ('published', 'partial')",
+                (f"{today}%",),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def manual_slot_done(self, day: str, slot: str) -> bool:
         """Vrai si un contenu manuel a déjà été publié pour ce créneau ce jour-là."""
         with self.connect() as conn:

@@ -279,7 +279,8 @@ class PublicationService:
     # ── Facebook — image (format déclaration, sans commentaire) ──────
 
     def _publish_facebook_image(
-        self, publication_id: int, image_path: Path, content, networks: dict
+        self, publication_id: int, image_path: Path, content, networks: dict,
+        with_comment: bool = False,
     ) -> None:
         if not self.config.get("publishers", {}).get("facebook", True):
             return
@@ -295,7 +296,8 @@ class PublicationService:
             publisher.validate()
             # Format déclaration : image + texte court, PAS de commentaire.
             post_id, url, _ = publisher.publish(
-                image_path, content.caption, content.comment_text, with_comment=False
+                image_path, content.caption, content.comment_text,
+                with_comment=with_comment,
             )
             self.database.update(
                 publication_id, facebook_post_id=post_id, facebook_url=url
@@ -659,6 +661,98 @@ class PublicationService:
             format_name=record.get("format_name") or "Reprise",
             consume_source=False,
         )
+
+    # ── rattrapage Facebook seul ────────────────────────────────────
+
+    def _facebook_media(self, record: dict) -> tuple[Path | None, str]:
+        """Média à republier sur Facebook pour un post déjà publié ailleurs.
+
+        Retourne (chemin, type) avec type ∈ {"image", "video", "none"}.
+        Déclaration → image stockée ; format vidéo → short_*.mp4 déjà généré
+        dans Videos/ (dérivé du nom de l'image) ; manuel → média d'origine si
+        encore présent, sinon aucun.
+        """
+        fmt = record.get("format")
+        if fmt == "declaration":
+            img = record.get("image_path")
+            if img and Path(img).is_file():
+                return Path(img), "image"
+            return None, "none"
+        # Formats vidéo (auto ou manuel) : on cherche le Short généré.
+        videos_dir = absolute_path(self.config["paths"].get("videos", "Videos"))
+        if record.get("image_path"):
+            stem = Path(record["image_path"]).stem
+            candidate = videos_dir / f"short_{stem}.mp4"
+            if candidate.is_file():
+                return candidate, "video"
+        # Manuel : fichier source encore en attente (pas consommé après échec total).
+        src = record.get("source_filename")
+        if src:
+            from .manual import pending_dir
+
+            pending = pending_dir(self.config) / src
+            if pending.is_file():
+                return pending, "video"
+        return None, "none"
+
+    def republish_facebook(
+        self, publication_id: int | None = None, *, dry_run: bool = False,
+    ) -> dict:
+        """Publie UNIQUEMENT sur Facebook les contenus du jour qui ont manqué
+        Facebook (jeton invalide au moment du post, statut partial/published).
+
+        Aucun re-publish YouTube/TikTok : le post existe déjà ailleurs, on ne
+        veut pas de doublon. Zéro nouvelle publication en base : on met à jour
+        l'enregistrement existant avec le post_id Facebook."""
+        if publication_id is not None:
+            record = self.database.get(publication_id)
+            records = [record] if record else []
+        else:
+            records = self.database.missing_facebook_today()
+        if not records:
+            return {"status": "idle", "republished": 0, "details": []}
+
+        results = []
+        for record in records:
+            if record.get("facebook_post_id"):
+                results.append({"id": record["id"], "status": "already_done"})
+                continue
+            media, kind = self._facebook_media(record)
+            if kind == "none" or media is None:
+                results.append({
+                    "id": record["id"], "status": "skipped",
+                    "reason": "média introuvable (image ou vidéo)",
+                })
+                continue
+
+            class _Content:
+                pillar = record.get("pillar") or "Manuel"
+                title = record.get("title") or ""
+                caption = record.get("caption") or record.get("title") or ""
+                comment_text = record.get("comment_text") or ""
+
+            if dry_run:
+                results.append({
+                    "id": record["id"], "status": "prepared",
+                    "media": str(media), "kind": kind,
+                })
+                continue
+            try:
+                if kind == "image":
+                    self._publish_facebook_image(record["id"], media, _Content(), {}, with_comment=False)
+                else:
+                    self._publish_facebook_reels(record["id"], media, _Content(), {})
+                # Après publication Facebook réussie, on passe le post à 'published'.
+                self.database.update(record["id"], status="published")
+                results.append({
+                    "id": record["id"], "status": "published",
+                    "media": str(media), "kind": kind,
+                })
+            except Exception as exc:
+                self.logger.exception("Rattrapage Facebook %s échoué", record["id"])
+                results.append({"id": record["id"], "status": "error", "error": str(exc)})
+
+        return {"status": "done", "republished": len(results), "details": results}
 
     # ── status ──────────────────────────────────────────────────────
 
