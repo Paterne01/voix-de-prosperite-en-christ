@@ -500,11 +500,25 @@ class PublicationService:
             raise FileNotFoundError(f"Fichier introuvable : {media}")
         started = datetime.now(UTC)
 
+        # Durée de la vidéo importée : courte (<= 60 s) → Short recadré ;
+        # longue (> 60 s) → vidéo classique publiée telle quelle. L'information
+        # pilote aussi les métadonnées YouTube (vocabulaire Short vs vidéo).
+        if kind == "image":
+            is_long = False
+        else:
+            from .video import probe_duration
+
+            try:
+                is_long = probe_duration(media) > SHORT_DURATION.get("video", 60)
+            except Exception as exc:
+                self.logger.warning("Durée de %s inconnue (%s), traitée comme courte", media.name, exc)
+                is_long = False
+
         # Métadonnées YouTube optimisées (titre + tags + description) générées
         # depuis le nom du fichier et la légende. La légende reste le texte
         # visible Facebook/TikTok ; elle devient aussi la description YouTube.
         try:
-            yt_meta = generate_youtube_metadata(media.name, caption)
+            yt_meta = generate_youtube_metadata(media.name, caption, long_video=is_long)
         except Exception as exc:
             self.logger.warning("Métadonnées YouTube échouées pour %s : %s", media.name, exc)
             yt_meta = {"title": caption.splitlines()[0] if caption else media.stem, "tags": [], "description": caption}
@@ -572,25 +586,22 @@ class PublicationService:
         created_media: list[Path] = []
 
         try:
-            from .video import crop_to_short, probe_duration
+            from .video import crop_to_short
 
             if kind == "image":
                 # Image → Short (audio format_b, 22 s), publié en Reels/Short.
                 video_path = self._build_video(media, self._find_audio("declaration"), format="declaration")
                 is_long = False
+            elif is_long:
+                # Vidéo longue (> 60 s) → publiée telle quelle sur tous les réseaux.
+                video_path = media
             else:
                 from .config import absolute_path as _abs
 
-                # Vidéo importée : courte (<= 60 s) → recadrée en Short 9:16 ;
-                # longue (> 60 s) → publiée telle quelle sur tous les réseaux.
-                duration = probe_duration(media)
-                is_long = duration > SHORT_DURATION.get("video", 60)
-                if is_long:
-                    video_path = media
-                else:
-                    video_path = crop_to_short(
-                        media, output_dir=_abs(self.config["paths"].get("videos", "Videos"))
-                    )
+                # Vidéo courte (<= 60 s) → recadrée en Short 9:16.
+                video_path = crop_to_short(
+                    media, output_dir=_abs(self.config["paths"].get("videos", "Videos"))
+                )
             created_media.append(video_path)
         except Exception as exc:
             self.logger.exception("Préparation vidéo manuelle %s échouée", publication_id)

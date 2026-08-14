@@ -27,7 +27,7 @@ YOUTUBE_META_SYSTEM_PROMPT = """Tu es un spécialiste du SEO YouTube pour la cha
 restauration relationnelle, provision active, générosité).
 
 À partir du NOM du fichier (qui contient l'idée du message) et de la LÉGENDE fournie, produis
-les métadonnées optimales pour publier le Short :
+les métadonnées optimales pour publier la vidéo (Short ou vidéo classique, selon la nature indiquée) :
 - "title" : un titre accrocheur en français, 15 mots maximum, jamais de promesse de richesse,
   guérison ou résultat garanti ;
 - "tags" : 6 à 10 mots-clés de recherche en français, courts, sans « # », liés au thème
@@ -124,14 +124,15 @@ _DEFAULT_YOUTUBE_TAGS = [
 ]
 
 
-def generate_youtube_metadata(filename: str, caption: str) -> dict:
+def generate_youtube_metadata(filename: str, caption: str, *, long_video: bool = False) -> dict:
     """Titre, tags et description optimisés pour YouTube, générés par l'IA
     depuis le nom du fichier + la légende.
 
     Retourne {"title", "tags", "description"}. La description reprend la
     légende (le texte visible Facebook/TikTok) ; les tags servent au champ
     « tags » de YouTube ; le titre est optimisé pour la recherche. Repli
-    déterministe si l'IA est absente ou échoue.
+    déterministe si l'IA est absente ou échoue. `long_video` adapte le
+    vocabulaire (Short vs vidéo classique).
     """
     humanized = humanize_filename(filename)
     fallback = {
@@ -150,6 +151,7 @@ def generate_youtube_metadata(filename: str, caption: str) -> dict:
             model="gemini-2.5-flash",
             contents=(
                 f"{YOUTUBE_META_SYSTEM_PROMPT}\n\n"
+                f"Nature de la vidéo : {'vidéo classique (pas un Short)' if long_video else 'Short'}\n"
                 f"Nom du fichier : {filename}\nLégende : {caption}"
             ),
         )
