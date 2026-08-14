@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,46 @@ FORMAT_KEYS = {
     "format_a": "format_a",
     "format_b": "format_b",
 }
+
+# Les 7 points (piliers) de la prospérité chrétienne. Ce sont les THÈMES que
+# chaque post doit servir. Par défaut, plan hebdomadaire : un point par jour.
+DEFAULT_WEEK_PILLARS = {
+    "monday": "Dignité",
+    "tuesday": "Sagesse",
+    "wednesday": "Libération",
+    "thursday": "Productivité",
+    "friday": "Restauration relationnelle",
+    "saturday": "Provision Active",
+    "sunday": "Générosité",
+}
+
+
+def weekday_pillar(config: dict[str, Any], when: datetime | None = None) -> str | None:
+    """Pilier imposé pour un jour donné (défaut : aujourd'hui).
+
+    Lit `config.content_plan` :
+      - {"mode": "day_based"} (valeur par défaut) — renvoie le pilier du jour
+        via `week` (dictionnaire jour -> pilier, clés anglaises monday..sunday) ;
+      - {"mode": "random"} — renvoie None et les générateurs choisissent au hasard ;
+      - {"mode": "day_based", "week": {...}} — plan personnalisé.
+    En cas de plan invalide ou incomplet, on retombe sur DEFAULT_WEEK_PILLARS
+    puis sur None (choix aléatoire) plutôt que de casser la génération.
+    """
+    plan = config.get("content_plan") or {}
+    if not isinstance(plan, dict):
+        plan = {}
+    if book_mode(plan) == "random":
+        return None
+    week = plan.get("week")
+    if not isinstance(week, dict) or not week:
+        week = dict(DEFAULT_WEEK_PILLARS)
+    day = (when or datetime.now()).strftime("%A").lower()
+    return week.get(day) or DEFAULT_WEEK_PILLARS.get(day)
+
+
+def book_mode(plan: dict[str, Any]) -> str:
+    """Mode du plan de contenu : 'day_based' (défaut) ou 'random'."""
+    return "random" if plan.get("mode") == "random" else "day_based"
 
 
 def asset_dirs(config: dict[str, Any], format: str) -> tuple[Path, Path]:

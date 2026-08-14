@@ -265,7 +265,7 @@ class ContentGenerator:
     def __init__(self, database):
         self.database = database
 
-    def generate(self, prompt: str | None = None) -> Content:
+    def generate(self, prompt: str | None = None, pillar: str | None = None) -> Content:
         exclusions = {field: sorted(self.database.recent_values(field))[-180:] for field in ("title", "topic", "verse_reference", "cta", "decor")}
         hook_type = self._pick_hook_type()
         key = get_secret("gemini_api_key")
@@ -276,21 +276,21 @@ class ContentGenerator:
             # qu'il corrige explicitement, avant de basculer sur le brouillon local.
             for attempt in range(5):
                 try:
-                    return self._gemini(key, exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, hook_type=hook_type)
+                    return self._gemini(key, exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, hook_type=hook_type, pillar=pillar)
                 except Exception as exc:
                     last_exc = exc
             # Gemini épuisé (quota/erreur) : on passe à Hugging Face avant le local.
             try:
-                return self._huggingface(exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, hook_type=hook_type)
+                return self._huggingface(exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, hook_type=hook_type, pillar=pillar)
             except Exception as hf_exc:
                 last_exc = hf_exc
             # A local draft keeps testing and recovery possible; publishing still records the source in logs.
-            return self._local(exclusions, warning=str(last_exc), hook_type=hook_type)
+            return self._local(exclusions, warning=str(last_exc), hook_type=hook_type, pillar=pillar)
         # Pas de clé Gemini : Hugging Face d'abord, local seulement si HF échoue.
         try:
-            return self._huggingface(exclusions, prompt=prompt, hook_type=hook_type)
+            return self._huggingface(exclusions, prompt=prompt, hook_type=hook_type, pillar=pillar)
         except Exception as hf_exc:
-            return self._local(exclusions, warning=str(hf_exc), hook_type=hook_type)
+            return self._local(exclusions, warning=str(hf_exc), hook_type=hook_type, pillar=pillar)
 
     def _pick_hook_type(self) -> tuple[str, str]:
         """Type d'accroche imposé : on écarte les types récents pour éviter la répétition."""
@@ -298,8 +298,8 @@ class ContentGenerator:
         pool = [(key, label) for key, label in HOOK_TYPES if key not in recent] or HOOK_TYPES
         return random.choice(pool)
 
-    def _gemini(self, key: str, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, hook_type: tuple[str, str] | None = None) -> Content:
-        pillar = random.choice(PILLARS)
+    def _gemini(self, key: str, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, hook_type: tuple[str, str] | None = None, pillar: str | None = None) -> Content:
+        pillar = pillar or random.choice(PILLARS)
         hook_key, hook_label = hook_type or random.choice(HOOK_TYPES)
         system_prompt = prompt or SYSTEM_PROMPT
         prompt_text = (
@@ -330,14 +330,14 @@ class ContentGenerator:
         self._validate(content, exclusions)
         return content
 
-    def _huggingface(self, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, hook_type: tuple[str, str] | None = None) -> Content:
+    def _huggingface(self, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, hook_type: tuple[str, str] | None = None, pillar: str | None = None) -> Content:
         """Repli IA via Hugging Face (Mistral-7B-Instruct) quand Gemini est hors ligne."""
         from .secrets import get_secret
 
         token = get_secret("huggingface_token")
         if not token:
             raise RuntimeError("Aucun jeton Hugging Face configuré")
-        pillar = random.choice(PILLARS)
+        pillar = pillar or random.choice(PILLARS)
         hook_key, hook_label = hook_type or random.choice(HOOK_TYPES)
         system_prompt = prompt or SYSTEM_PROMPT
         prompt_text = (
@@ -365,13 +365,13 @@ class ContentGenerator:
         self._validate(content, exclusions)
         return content
 
-    def _local(self, exclusions: dict[str, list[str]], warning: str | None = None, hook_type: tuple[str, str] | None = None) -> Content:
+    def _local(self, exclusions: dict[str, list[str]], warning: str | None = None, hook_type: tuple[str, str] | None = None, pillar: str | None = None) -> Content:
         """Deterministic no-API fallback intended for setup, tests and quota recovery."""
         index = len(exclusions["title"]) + 1
         last_error = warning or "générateur local"
         for _ in range(200):
             try:
-                content = self._build_local(index, hook_type=hook_type)
+                content = self._build_local(index, hook_type=hook_type, pillar=pillar)
                 self._validate(content, exclusions)
                 return content
             except ValueError as exc:
@@ -379,8 +379,8 @@ class ContentGenerator:
                 index += 1
         raise ValueError(f"Impossible de générer un contenu unique après 200 essais : {last_error}")
 
-    def _build_local(self, index: int, hook_type: tuple[str, str] | None = None) -> Content:
-        pillar = PILLARS[index % len(PILLARS)]
+    def _build_local(self, index: int, hook_type: tuple[str, str] | None = None, pillar: str | None = None) -> Content:
+        pillar = pillar or PILLARS[index % len(PILLARS)]
         themes = ["discipline fidèle", "vision de long terme", "gestion responsable", "paix dans les décisions", "service qui crée de la valeur", "générosité intentionnelle", "courage dans l'action"]
         theme = themes[index % len(themes)]
         topic = f"{pillar} — {theme} — {index}"

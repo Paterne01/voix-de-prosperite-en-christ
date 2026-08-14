@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.content import HOOK_TYPES, Content, ContentGenerator, normalize_hashtags
+from src.config import DEFAULT_WEEK_PILLARS, weekday_pillar
 from src.content_declarations import DeclarationGenerator
 from src.database import HistoryDatabase
 from src.manual import generate_youtube_metadata
@@ -109,6 +110,53 @@ def test_declarations_local_has_exactly_five_hashtags(tmp_path):
         declaration = gen._local({field: {item.topic.casefold() for item in generated} for field in ("title", "topic")})
         generated.append(declaration)
     assert all(len(item.hashtags) == 5 for item in generated)
+
+
+def test_weekday_pillar_default_plan():
+    """Par défaut, chaque jour a SON pilier des 7 points (plan hebdomadaire)."""
+    config = {"content_plan": {"mode": "day_based"}}
+    # Lundi 2026-08-10 -> Dignité, Mardi -> Sagesse, ... Dimanche -> Générosité.
+    assert weekday_pillar(config, datetime(2026, 8, 10)) == "Dignité"       # lundi
+    assert weekday_pillar(config, datetime(2026, 8, 11)) == "Sagesse"       # mardi
+    assert weekday_pillar(config, datetime(2026, 8, 12)) == "Libération"    # mercredi
+    assert weekday_pillar(config, datetime(2026, 8, 13)) == "Productivité"  # jeudi
+    assert weekday_pillar(config, datetime(2026, 8, 14)) == "Restauration relationnelle"
+    assert weekday_pillar(config, datetime(2026, 8, 15)) == "Provision Active"
+    assert weekday_pillar(config, datetime(2026, 8, 16)) == "Générosité"    # dimanche
+
+
+def test_weekday_pillar_random_mode_and_custom_week():
+    """mode=random renvoie None ; un plan personnalisé est respecté."""
+    assert weekday_pillar({"content_plan": {"mode": "random"}}, datetime(2026, 8, 10)) is None
+    custom = {"content_plan": {"mode": "day_based", "week": {"monday": "Sagesse", "tuesday": "Dignité"}}}
+    assert weekday_pillar(custom, datetime(2026, 8, 10)) == "Sagesse"
+    # Jour non couvert par le plan personnalisé -> repli aléatoire (None via défaut absent).
+    assert weekday_pillar(custom, datetime(2026, 8, 12)) in DEFAULT_WEEK_PILLARS.values()
+
+
+def test_weekday_pillar_defaults_to_today():
+    config = {"content_plan": {"mode": "day_based"}}
+    assert weekday_pillar(config) in DEFAULT_WEEK_PILLARS.values()
+
+
+def test_local_generator_honors_forced_pillar(tmp_path):
+    db = HistoryDatabase(tmp_path / "history.sqlite3")
+    content = ContentGenerator(db)._local(
+        {field: set() for field in ("title", "topic", "verse_reference", "cta", "decor")},
+        pillar="Sagesse",
+    )
+    assert content.pillar == "Sagesse"
+    assert content.topic.startswith("Sagesse")
+
+
+def test_declarations_local_honors_forced_pillar(tmp_path):
+    db = HistoryDatabase(tmp_path / "history.sqlite3")
+    declaration = DeclarationGenerator(db)._local(
+        {field: set() for field in ("title", "topic")},
+        pillar="Provision Active",
+    )
+    assert declaration.pillar == "Provision Active"
+    assert declaration.topic.startswith("Provision Active")
 
 
 def test_pick_hook_type_avoids_last_used(tmp_path):

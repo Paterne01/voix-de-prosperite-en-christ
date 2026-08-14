@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
-from .config import absolute_path, asset_dirs
+from .config import absolute_path, asset_dirs, weekday_pillar
 from .content import ContentGenerator
 from .content_declarations import DeclarationGenerator
 from .database import HistoryDatabase
@@ -124,10 +124,10 @@ class PublicationService:
 
     # ── prepare ──────────────────────────────────────────────────────
 
-    def prepare(self, mode: str | None = None, format: str = "video", prompt: str | None = None) -> PreparedPost:
+    def prepare(self, mode: str | None = None, format: str = "video", prompt: str | None = None, pillar: str | None = None) -> PreparedPost:
         from .backgrounds import pick_background
 
-        content = self._generator(format).generate(prompt=prompt)
+        content = self._generator(format).generate(prompt=prompt, pillar=pillar)
         # Note d'engagement optionnelle (quota Gemini 20 req/j : activable via
         # config `engagement_score: true`, sinon aucun appel supplémentaire).
         score = None
@@ -165,7 +165,13 @@ class PublicationService:
             }
         allowed = set(networks) if networks else None
         started = datetime.now(UTC)
-        prepared = self.prepare(mode, format=format, prompt=prompt)
+        when = None
+        if scheduled_for:
+            try:
+                when = datetime.fromisoformat(scheduled_for)
+            except ValueError:
+                when = None
+        prepared = self.prepare(mode, format=format, prompt=prompt, pillar=weekday_pillar(self.config, when))
         content, image_path, background, bg_kind, bg_path, overlay_path = prepared
 
         publication_id = self.database.create(

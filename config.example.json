@@ -9,6 +9,18 @@
     "12:00": "declaration",
     "16:00": "video"
   },
+  "content_plan": {
+    "mode": "day_based",
+    "week": {
+      "monday": "Dignité",
+      "tuesday": "Sagesse",
+      "wednesday": "Libération",
+      "thursday": "Productivité",
+      "friday": "Restauration relationnelle",
+      "saturday": "Provision Active",
+      "sunday": "Générosité"
+    }
+  },
   "logo_path": "assets/logo.png",
   "image_mode": "local",
   "manual_schedule": {

@@ -210,7 +210,7 @@ class DeclarationGenerator:
     def __init__(self, database):
         self.database = database
 
-    def generate(self, prompt: str | None = None) -> Declaration:
+    def generate(self, prompt: str | None = None, pillar: str | None = None) -> Declaration:
         exclusions = {
             field: sorted(self.database.recent_values(field))[-50:]
             for field in ("title", "topic", "verse_reference", "cta")
@@ -220,23 +220,23 @@ class DeclarationGenerator:
             last_exc: Exception | None = None
             for attempt in range(4):
                 try:
-                    return self._gemini(key, exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt)
+                    return self._gemini(key, exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, pillar=pillar)
                 except Exception as exc:
                     last_exc = exc
             # Gemini épuisé : repli Hugging Face avant le générateur local.
             try:
-                return self._huggingface(exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt)
+                return self._huggingface(exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, pillar=pillar)
             except Exception as hf_exc:
                 last_exc = hf_exc
-            return self._local(exclusions, warning=str(last_exc))
+            return self._local(exclusions, warning=str(last_exc), pillar=pillar)
         # Pas de clé Gemini : Hugging Face d'abord, local seulement si HF échoue.
         try:
-            return self._huggingface(exclusions, prompt=prompt)
+            return self._huggingface(exclusions, prompt=prompt, pillar=pillar)
         except Exception as hf_exc:
-            return self._local(exclusions, warning=str(hf_exc))
+            return self._local(exclusions, warning=str(hf_exc), pillar=pillar)
 
-    def _gemini(self, key: str, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None) -> Declaration:
-        pillar = random.choice(PILLARS)
+    def _gemini(self, key: str, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, pillar: str | None = None) -> Declaration:
+        pillar = pillar or random.choice(PILLARS)
         system_prompt = prompt or SYSTEM_PROMPT_DECLARATION
         prompt_text = (
             f"{system_prompt}\n"
@@ -260,12 +260,12 @@ class DeclarationGenerator:
         self._validate(content, exclusions)
         return content
 
-    def _huggingface(self, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None) -> Declaration:
+    def _huggingface(self, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, pillar: str | None = None) -> Declaration:
         """Repli IA via Hugging Face (Mistral-7B-Instruct) quand Gemini est hors ligne."""
         token = get_secret("huggingface_token")
         if not token:
             raise RuntimeError("Aucun jeton Hugging Face configuré")
-        pillar = random.choice(PILLARS)
+        pillar = pillar or random.choice(PILLARS)
         system_prompt = prompt or SYSTEM_PROMPT_DECLARATION
         prompt_text = (
             f"{system_prompt}\n"
@@ -286,12 +286,12 @@ class DeclarationGenerator:
         self._validate(content, exclusions)
         return content
 
-    def _local(self, exclusions: dict[str, list[str]], warning: str | None = None) -> Declaration:
+    def _local(self, exclusions: dict[str, list[str]], warning: str | None = None, pillar: str | None = None) -> Declaration:
         index = len(exclusions["topic"]) + 1
         last_error = warning or "générateur local de déclarations"
         for _ in range(400):
             try:
-                content = self._build_local(index)
+                content = self._build_local(index, pillar=pillar)
                 self._validate(content, exclusions)
                 return content
             except ValueError as exc:
@@ -299,8 +299,8 @@ class DeclarationGenerator:
                 index += 1
         raise ValueError(f"Impossible de générer une déclaration unique après 400 essais : {last_error}")
 
-    def _build_local(self, index: int) -> Declaration:
-        pillar = PILLARS[index % len(PILLARS)]
+    def _build_local(self, index: int, pillar: str | None = None) -> Declaration:
+        pillar = pillar or PILLARS[index % len(PILLARS)]
         plan = {
             "Dignité": "Tu es relevé et choisi ; ta valeur ne dépend pas de tes dettes.",
             "Sagesse": "Des cieux s'ouvrent sur tes décisions ; tu choisis avec discernement.",
