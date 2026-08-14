@@ -107,7 +107,9 @@ class FacebookReelsPublisher(BasePublisher):
             timeout=30,
         )
         start.raise_for_status()
-        video_id = start.json().get("video_id")
+        start_data = start.json()
+        video_id = start_data.get("video_id")
+        upload_session_id = start_data.get("upload_session_id")
         if not video_id:
             raise RuntimeError(f"Réponse Facebook /videos sans video_id : {start.text[:400]}")
 
@@ -130,6 +132,7 @@ class FacebookReelsPublisher(BasePublisher):
             data={
                 "upload_phase": "finish",
                 "video_id": video_id,
+                "upload_session_id": upload_session_id,
                 "description": description,
                 "access_token": self.token,
             },
