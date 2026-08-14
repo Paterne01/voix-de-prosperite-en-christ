@@ -180,7 +180,8 @@ class HistoryDatabase:
         today = datetime.now().date().isoformat()
         with self.connect() as conn:
             row = conn.execute(
-                "SELECT 1 FROM publications WHERE scheduled_for LIKE ? AND status = 'published' LIMIT 1",
+                "SELECT 1 FROM publications WHERE scheduled_for LIKE ? "
+                "AND status IN ('published', 'partial') LIMIT 1",
                 (f"{today}T{schedule_time}%",),
             ).fetchone()
         return row is None

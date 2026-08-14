@@ -229,7 +229,7 @@ class TikTokPublisher(BasePublisher):
             return {"status": "error", "reason": str(exc)}
 
     def publish(
-        self, *, media_path: str, text: str, details: str = ""
+        self, *, media_path: str, text: str, details: str = "", long_video: bool = False
     ) -> tuple[str, str | None, str | None]:
         video_path = Path(media_path)
         if not video_path.is_file():

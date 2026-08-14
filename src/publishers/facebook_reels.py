@@ -64,6 +64,81 @@ class FacebookReelsPublisher(BasePublisher):
 
         raise AssertionError("Boucle Reel Facebook inattendue")
 
+    def publish_long(
+        self, *, media_path: str, text: str, details: str = ""
+    ) -> tuple[str, str | None, str | None]:
+        """Publie une vidéo LONGUE (> 60 s) sur la Page : upload direct via
+        /videos (le format Reels /video_reels est réservé aux vidéos courtes)."""
+        retries = int(self.config.get("facebook", {}).get("max_retries", 3))
+        video_path = Path(media_path)
+        description = (text or "")[:2200]
+
+        for attempt in range(retries):
+            try:
+                post_id, video_url = self._upload_video_long(video_path, description)
+                comment_url = self._post_comment(post_id, details)
+                return post_id, video_url, comment_url
+            except requests.RequestException as exc:
+                if attempt == retries - 1:
+                    raise RuntimeError(
+                        f"Publication vidéo longue Facebook impossible après {retries} essais : {exc}"
+                    ) from exc
+                self.logger.warning(
+                    "Échec vidéo longue Facebook (%s/%s), nouvel essai : %s",
+                    attempt + 1,
+                    retries,
+                    exc,
+                )
+
+        raise AssertionError("Boucle vidéo longue Facebook inattendue")
+
+    def _upload_video_long(self, video_path: Path, description: str) -> tuple[str, str]:
+        """Upload direct d'une vidéo longue via POST /{page_id}/videos.
+
+        Retourne (post_id de la vidéo, URL publique de la vidéo)."""
+        base = f"https://graph.facebook.com/{self.api_version}/{self.page_id}/videos"
+        start = requests.post(
+            base,
+            data={
+                "upload_phase": "start",
+                "file_size": str(video_path.stat().st_size),
+                "access_token": self.token,
+            },
+            timeout=30,
+        )
+        start.raise_for_status()
+        video_id = start.json().get("video_id")
+        if not video_id:
+            raise RuntimeError(f"Réponse Facebook /videos sans video_id : {start.text[:400]}")
+
+        upload_url = f"https://rupload.facebook.com/video-upload/{self.api_version}/{video_id}"
+        with video_path.open("rb") as handle:
+            transfer = requests.post(
+                upload_url,
+                headers={
+                    "Authorization": f"OAuth {self.token}",
+                    "offset": "0",
+                    "file_size": str(video_path.stat().st_size),
+                },
+                data=handle.read(),
+                timeout=300,
+            )
+        transfer.raise_for_status()
+
+        finish = requests.post(
+            base,
+            data={
+                "upload_phase": "finish",
+                "video_id": video_id,
+                "description": description,
+                "access_token": self.token,
+            },
+            timeout=60,
+        )
+        finish.raise_for_status()
+        post_id = finish.json().get("id") or video_id
+        return post_id, f"https://www.facebook.com/{self.page_id}/videos/{post_id}"
+
     # ── étapes upload ────────────────────────────────────────────────
 
     def _upload_and_finish(self, base: str, video_path: Path, description: str) -> tuple[str, str]:

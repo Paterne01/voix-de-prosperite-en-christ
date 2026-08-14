@@ -189,6 +189,34 @@ def build_short_video_from_video(
     return output
 
 
+def probe_duration(path: str | Path) -> float:
+    """Durée en secondes d'un média (0.0 si non lisible)."""
+    return _probe_duration(Path(path))
+
+
+def crop_to_short(
+    source: str | Path,
+    output_dir: str | Path | None = None,
+    max_duration: int = SHORTS_MAX_SECONDS,
+) -> Path:
+    """Recadre une vidéo manuelle en 9:16 (1080×1920) pour publication en Short.
+
+    Utilisé par le Format C (fichiers importés) : la vidéo source est
+    normalisée en vertical, bornée à max_duration secondes, avec sa piste
+    audio conservée. Retourne le chemin du fichier produé.
+    """
+    src = Path(source)
+    if not src.exists():
+        raise FileNotFoundError(f"Vidéo introuvable : {src}")
+
+    output_dir_p = Path(output_dir) if output_dir else ROOT / "Videos"
+    output = output_dir_p / f"short_{src.stem}.mp4"
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    _normalize_clip(src, output, dur=float(max_duration) if max_duration else None)
+    return output
+
+
 # ── helpers watermark / concat ──────────────────────────────────────
 
 

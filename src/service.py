@@ -331,7 +331,8 @@ class PublicationService:
     # ── Facebook — Reels (format vidéo) ──────────────────────────────
 
     def _publish_facebook_reels(
-        self, publication_id: int, video_path: Path, content, networks: dict
+        self, publication_id: int, video_path: Path, content, networks: dict,
+        long_video: bool = False,
     ) -> None:
         if not self.config.get("publishers", {}).get("facebook", True):
             return
@@ -340,11 +341,18 @@ class PublicationService:
 
             fb = FacebookReelsPublisher(self.config, self.logger)
             fb.validate()
-            post_id, url, comment_url = fb.publish(
-                media_path=str(video_path),
-                text=content.caption,
-                details=content.comment_text,
-            )
+            if long_video:
+                post_id, url, comment_url = fb.publish_long(
+                    media_path=str(video_path),
+                    text=content.caption,
+                    details=content.comment_text,
+                )
+            else:
+                post_id, url, comment_url = fb.publish(
+                    media_path=str(video_path),
+                    text=content.caption,
+                    details=content.comment_text,
+                )
             self.database.update(
                 publication_id, facebook_post_id=post_id, facebook_url=url
             )
@@ -359,7 +367,8 @@ class PublicationService:
     # ── YouTube ──────────────────────────────────────────────────────
 
     def _publish_youtube(
-        self, publication_id: int, video_path: Path, content, networks: dict
+        self, publication_id: int, video_path: Path, content, networks: dict,
+        long_video: bool = False,
     ) -> None:
         if not self.config.get("publishers", {}).get("youtube", False):
             return
@@ -373,6 +382,7 @@ class PublicationService:
                 details=getattr(content, "youtube_description", None) or content.comment_text,
                 tags=getattr(content, "hashtags", None) or None,
                 comment=getattr(content, "youtube_comment", None),
+                long_video=long_video,
             )
             self.database.update(
                 publication_id, youtube_video_id=video_id, youtube_url=url,
@@ -436,7 +446,8 @@ class PublicationService:
     # ── TikTok (Direct Post, format vidéo uniquement) ─────────────────
 
     def _publish_tiktok(
-        self, publication_id: int, video_path: Path, content, networks: dict
+        self, publication_id: int, video_path: Path, content, networks: dict,
+        long_video: bool = False,
     ) -> None:
         settings = self.config.get("publishers", {}).get("tiktok", {})
         if not isinstance(settings, dict) or not settings.get("enabled", False):
@@ -456,6 +467,7 @@ class PublicationService:
                 media_path=str(video_path),
                 text=content.caption,
                 details=content.comment_text,
+                long_video=long_video,
             )
             self.database.update(
                 publication_id, tiktok_publish_id=publish_id, tiktok_url=url
@@ -558,16 +570,25 @@ class PublicationService:
         created_media: list[Path] = []
 
         try:
+            from .video import crop_to_short, probe_duration
+
             if kind == "image":
                 # Image → Short (audio format_b, 22 s), publié en Reels/Short.
                 video_path = self._build_video(media, self._find_audio("declaration"), format="declaration")
+                is_long = False
             else:
-                from .video import crop_to_short
                 from .config import absolute_path as _abs
 
-                video_path = crop_to_short(
-                    media, output_dir=_abs(self.config["paths"].get("videos", "Videos"))
-                )
+                # Vidéo importée : courte (<= 60 s) → recadrée en Short 9:16 ;
+                # longue (> 60 s) → publiée telle quelle sur tous les réseaux.
+                duration = probe_duration(media)
+                is_long = duration > SHORT_DURATION.get("video", 60)
+                if is_long:
+                    video_path = media
+                else:
+                    video_path = crop_to_short(
+                        media, output_dir=_abs(self.config["paths"].get("videos", "Videos"))
+                    )
             created_media.append(video_path)
         except Exception as exc:
             self.logger.exception("Préparation vidéo manuelle %s échouée", publication_id)
@@ -575,11 +596,15 @@ class PublicationService:
             return {"id": publication_id, "status": "failed", "error": str(exc)}
 
         if wants("facebook"):
-            self._publish_facebook_reels(publication_id, video_path, content, networks_out)
+            self._publish_facebook_reels(
+                publication_id, video_path, content, networks_out, long_video=is_long
+            )
         if wants("youtube"):
-            self._publish_youtube(publication_id, video_path, content, networks_out)
+            self._publish_youtube(
+                publication_id, video_path, content, networks_out, long_video=is_long
+            )
         if wants("tiktok"):
-            self._publish_tiktok(publication_id, video_path, content, networks_out)
+            self._publish_tiktok(publication_id, video_path, content, networks_out, long_video=is_long)
 
         overall = self._resolve_status(networks_out)
         errors = "; ".join(n["error"] for n in networks_out.values() if n.get("status") == "error")

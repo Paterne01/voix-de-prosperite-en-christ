@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from google import genai
 
 from .content import normalize_hashtags
+from .hf_text import generate_json as hf_generate_json
 from .secrets import get_secret
 
 PILLARS = [
@@ -222,8 +223,17 @@ class DeclarationGenerator:
                     return self._gemini(key, exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt)
                 except Exception as exc:
                     last_exc = exc
+            # Gemini épuisé : repli Hugging Face avant le générateur local.
+            try:
+                return self._huggingface(exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt)
+            except Exception as hf_exc:
+                last_exc = hf_exc
             return self._local(exclusions, warning=str(last_exc))
-        return self._local(exclusions)
+        # Pas de clé Gemini : Hugging Face d'abord, local seulement si HF échoue.
+        try:
+            return self._huggingface(exclusions, prompt=prompt)
+        except Exception as hf_exc:
+            return self._local(exclusions, warning=str(hf_exc))
 
     def _gemini(self, key: str, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None) -> Declaration:
         pillar = random.choice(PILLARS)
@@ -242,6 +252,32 @@ class DeclarationGenerator:
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt_text)
         raw = response.text.strip().removeprefix("```json").removesuffix("```").strip()
         data = json.loads(raw)
+        data["hashtags"] = normalize_hashtags(
+            data.get("hashtags"),
+            fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),
+        )
+        content = Declaration(**{field: data[field] for field in Declaration.__dataclass_fields__})
+        self._validate(content, exclusions)
+        return content
+
+    def _huggingface(self, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None) -> Declaration:
+        """Repli IA via Hugging Face (Mistral-7B-Instruct) quand Gemini est hors ligne."""
+        token = get_secret("huggingface_token")
+        if not token:
+            raise RuntimeError("Aucun jeton Hugging Face configuré")
+        pillar = random.choice(PILLARS)
+        system_prompt = prompt or SYSTEM_PROMPT_DECLARATION
+        prompt_text = (
+            f"{system_prompt}\n"
+            f"Pilier obligatoire : {pillar}.\n"
+            f"Éléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
+        )
+        if avoid:
+            prompt_text += (
+                f"\nTon brouillon précédent a été rejeté pour ce motif : {avoid}.\n"
+                "Corrige-le : prend un AUTRE verset, une AUTRE reformulation de « declarare »."
+            )
+        data = hf_generate_json(system_prompt=system_prompt, prompt_text=prompt_text, token=token)
         data["hashtags"] = normalize_hashtags(
             data.get("hashtags"),
             fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),

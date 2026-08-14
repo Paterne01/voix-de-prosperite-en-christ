@@ -70,6 +70,7 @@ class YouTubePublisher(BasePublisher):
     def publish(
         self, *, media_path: str, text: str, details: str = "",
         tags: list[str] | None = None, comment: str | None = None,
+        long_video: bool = False,
     ) -> tuple[str, str | None, str | None]:
         retries = int(self.config.get("youtube", {}).get("max_retries", 3))
         privacy = self.config.get("youtube", {}).get("privacy_status", "public")
@@ -107,9 +108,14 @@ class YouTubePublisher(BasePublisher):
                 )
                 comment_text = comment if comment is not None else (details or text)
                 comment_url = self._post_comment(service, video_id, comment_text)
+                public_url = (
+                    f"https://www.youtube.com/watch?v={video_id}"
+                    if long_video
+                    else f"https://www.youtube.com/shorts/{video_id}"
+                )
                 return (
                     video_id,
-                    f"https://www.youtube.com/shorts/{video_id}",
+                    public_url,
                     comment_url,
                 )
 

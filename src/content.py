@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from google import genai
 
+from .hf_text import generate_json as hf_generate_json
 from .secrets import get_secret
 
 PILLARS = [
@@ -278,9 +279,18 @@ class ContentGenerator:
                     return self._gemini(key, exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, hook_type=hook_type)
                 except Exception as exc:
                     last_exc = exc
+            # Gemini épuisé (quota/erreur) : on passe à Hugging Face avant le local.
+            try:
+                return self._huggingface(exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, hook_type=hook_type)
+            except Exception as hf_exc:
+                last_exc = hf_exc
             # A local draft keeps testing and recovery possible; publishing still records the source in logs.
             return self._local(exclusions, warning=str(last_exc), hook_type=hook_type)
-        return self._local(exclusions, hook_type=hook_type)
+        # Pas de clé Gemini : Hugging Face d'abord, local seulement si HF échoue.
+        try:
+            return self._huggingface(exclusions, prompt=prompt, hook_type=hook_type)
+        except Exception as hf_exc:
+            return self._local(exclusions, warning=str(hf_exc), hook_type=hook_type)
 
     def _pick_hook_type(self) -> tuple[str, str]:
         """Type d'accroche imposé : on écarte les types récents pour éviter la répétition."""
@@ -310,6 +320,41 @@ class ContentGenerator:
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt_text)
         raw = response.text.strip().removeprefix("```json").removesuffix("```").strip()
         data = json.loads(raw)
+        data["hashtags"] = normalize_hashtags(
+            data.get("hashtags"),
+            fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),
+        )
+        data["hook_type"] = hook_key
+        data.setdefault("engagement_score", None)
+        content = Content(**{field: data[field] for field in Content.__dataclass_fields__})
+        self._validate(content, exclusions)
+        return content
+
+    def _huggingface(self, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, hook_type: tuple[str, str] | None = None) -> Content:
+        """Repli IA via Hugging Face (Mistral-7B-Instruct) quand Gemini est hors ligne."""
+        from .secrets import get_secret
+
+        token = get_secret("huggingface_token")
+        if not token:
+            raise RuntimeError("Aucun jeton Hugging Face configuré")
+        pillar = random.choice(PILLARS)
+        hook_key, hook_label = hook_type or random.choice(HOOK_TYPES)
+        system_prompt = prompt or SYSTEM_PROMPT
+        prompt_text = (
+            f"{system_prompt}\nPilier obligatoire : {pillar}.\n"
+            f"Type d'accroche IMPOSÉ pour le champ \"hook\" : « {hook_label} » "
+            f"(clé : {hook_key}). Construis le hook selon ce type, sans jamais le nommer.\n"
+            f"Éléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
+        )
+        if avoid:
+            prompt_text += (
+                f"\nTon brouillon précédent a été rejeté pour ce motif : {avoid}.\n"
+                "Corrige-le maintenant : choisis un AUTRE verset, une accroche du même type "
+                "mais avec une formulation différente, un autre appel à l'action, et vérifie "
+                "que le nombre annoncé dans le titre égale exactement le nombre de points. "
+                "Aucun élément interdit ci-dessus."
+            )
+        data = hf_generate_json(system_prompt=system_prompt, prompt_text=prompt_text, token=token)
         data["hashtags"] = normalize_hashtags(
             data.get("hashtags"),
             fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),
