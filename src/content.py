@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 
 from .hf_text import generate_json as hf_generate_json
 from .llm import LLMError, generate_with_fallback, ordered_providers
-from .secrets import get_secret
 
 PILLARS = [
     "Dignité", "Sagesse", "Libération", "Productivité", "Restauration relationnelle",
@@ -484,7 +483,7 @@ class ContentGenerator:
             hook_type=hook_key,
         )
 
-    def _score_engagement(self, content: Content, key: str | None = None) -> int | None:
+    def _score_engagement(self, content: Content) -> int | None:
         """Note d'engagement (1-10) du brouillon, via un court appel LLM.
 
         Appelée uniquement si le service autorise le scoring (config

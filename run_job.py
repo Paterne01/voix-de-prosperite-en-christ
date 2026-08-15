@@ -33,12 +33,25 @@ def _run() -> None:
     config = load_config()
 
     if args.check_ai:
-        from src.llm import check_provider, ordered_providers
+        from src.llm import PROVIDERS, check_provider, ordered_providers
+        from src.secrets import get_secret
 
-        print(f"Provider principal configuré : {config.get('ai', {}).get('provider', 'gemini')}")
+        ai = config.get("ai") or {}
+        print(f"Provider principal configuré : {ai.get('provider', 'gemini')}")
+        print("Ordre de bascule : " + ", ".join(ai.get("fallback_order", ["gemini", "openrouter", "ollama", "grok", "nvidia", "zen", "openai"])))
+        print("---")
+        tested = []
         for provider in ordered_providers(config):
             ok, message = check_provider(config, provider.name)
-            print(("OK  " if ok else "FAIL") + f"  {message}")
+            tested.append(provider.name)
+            print(("OK   " if ok else "FAIL ") + f"  {message}")
+        print("---")
+        for name, spec in PROVIDERS.items():
+            if name in tested:
+                continue
+            secret = spec.get("api_key_secret")
+            have = bool(get_secret(secret)) if secret else True
+            print(("OK   " if have else "PAS DE CLÉ") + f"  {name}: {spec['model']}" + ("" if have else f" → enregistre {secret} (dashboard > Clés sécurisées)"))
         return
 
     service = PublicationService(config, setup_logging(config))

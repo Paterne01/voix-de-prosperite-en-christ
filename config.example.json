@@ -1,5 +1,5 @@
 {
-  "_doc": "Ceci est le fichier d'exemple. Copiez-le en config.json puis remplissez vos valeurs. Les clés inconnues (ex. _doc) sont ignorées par le programme.",
+  "_doc": "Ceci est le fichier d'exemple. Copiez-le en config.json puis remplissez vos valeurs. Les clés inconnues (ex. _doc) sont ignorées par le programme. Section ai : fournisseur principal (provider), ordre de bascule automatique (fallback_order) et détails par provider. Chaque provider utilise une clé de secret enregistrée (dashboard > Clés sécurisées, ou .env). Si le provider principal échoue (quota, panne), l'app essaie les suivants automatiquement puis Hugging Face puis le générateur local. Testez les clés avec : python run_job.py --check-ai.",
   "page_id": "",
   "timezone": "Africa/Nairobi",
   "schedule": ["00:00", "08:00", "12:00", "16:00"],
