@@ -588,10 +588,12 @@ def republish_facebook_one(publication_id: int):
 
 
 if __name__ == "__main__":
+    from src.console import configure_console
     from src.scheduler_log import log_run
 
     @log_run("app.py (serveur Flask)")
     def _serve() -> None:
+        configure_console()
         # Démarre APScheduler : créneaux des formats actifs + boucle manuelle.
         get_scheduler()
         app.run(host="127.0.0.1", port=8765, debug=False, use_reloader=False)

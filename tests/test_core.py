@@ -41,7 +41,7 @@ def test_slot_due_now_skips_already_published_slot():
 
 
 def test_generate_youtube_metadata_fallback_without_key(monkeypatch):
-    monkeypatch.setattr("src.manual.get_secret", lambda name: None)
+    monkeypatch.setattr("src.manual.ordered_providers", lambda config: [])
     meta = generate_youtube_metadata("provision-divine.mp4", "Dieu pourvoit encore aujourd'hui.")
     assert meta["title"]
     assert meta["description"] == "Dieu pourvoit encore aujourd'hui."

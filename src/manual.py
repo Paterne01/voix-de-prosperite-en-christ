@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import absolute_path
-from .secrets import get_secret
+from .llm import ordered_providers
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv"}
@@ -37,17 +37,6 @@ les métadonnées optimales pour publier la vidéo (Short ou vidéo classique, s
 
 Réponds EXCLUSIVEMENT avec un objet JSON valide :
 {"title":"...","tags":["...","..."],"description":"..."}"""
-
-
-def _extract_json(text: str) -> dict:
-    """Extrait le premier objet JSON du texte (tolère les blocs ```json … ```)."""
-    import json
-
-    text = text.strip().removeprefix("```json").removeprefix("```").strip()
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
-        raise ValueError("Aucun objet JSON dans la réponse de l'IA")
-    return json.loads(text[start:end + 1])
 
 
 def pending_dir(config: dict) -> Path:
@@ -99,19 +88,23 @@ def humanize_filename(name: str) -> str:
 
 def generate_caption(filename: str) -> str:
     """Légende générée par l'IA depuis le nom du fichier (repli : nom lisible)."""
-    humanized = humanize_filename(filename)
-    key = get_secret("gemini_api_key")
-    if not key:
-        return f"{humanized} — reçois cette parole et laisse-la agir dans ta journée. 🙏"
-    try:
-        from google import genai
+    from .config import load_config
 
-        client = genai.Client(api_key=key)
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=f"{CAPTION_SYSTEM_PROMPT}\n\nNom du fichier : {filename}",
+    humanized = humanize_filename(filename)
+    try:
+        config = load_config()
+        if not ordered_providers(config):
+            raise RuntimeError("Aucun provider LLM configuré")
+        from .llm import generate_with_fallback
+
+        raw, _provider = generate_with_fallback(
+            config,
+            CAPTION_SYSTEM_PROMPT,
+            f"Nom du fichier : {filename}",
+            do_json=False,
+            max_tokens=120,
         )
-        caption = (response.text or "").strip()
+        caption = str(raw).strip()
         return caption[:280] or f"{humanized} — reçois cette parole. 🙏"
     except Exception:
         return f"{humanized} — reçois cette parole et laisse-la agir dans ta journée. 🙏"
@@ -134,28 +127,30 @@ def generate_youtube_metadata(filename: str, caption: str, *, long_video: bool =
     déterministe si l'IA est absente ou échoue. `long_video` adapte le
     vocabulaire (Short vs vidéo classique).
     """
+    from .config import load_config
+
     humanized = humanize_filename(filename)
     fallback = {
         "title": (caption.splitlines()[0] if caption else humanized)[:100] or humanized[:100],
         "tags": list(_DEFAULT_YOUTUBE_TAGS),
         "description": caption or humanized,
     }
-    key = get_secret("gemini_api_key")
-    if not key:
-        return fallback
     try:
-        from google import genai
+        config = load_config()
+        if not ordered_providers(config):
+            return fallback
+        from .llm import generate_with_fallback
 
-        client = genai.Client(api_key=key)
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=(
-                f"{YOUTUBE_META_SYSTEM_PROMPT}\n\n"
+        data, _provider = generate_with_fallback(
+            config,
+            YOUTUBE_META_SYSTEM_PROMPT,
+            (
                 f"Nature de la vidéo : {'vidéo classique (pas un Short)' if long_video else 'Short'}\n"
                 f"Nom du fichier : {filename}\nLégende : {caption}"
             ),
+            do_json=True,
+            max_tokens=300,
         )
-        data = _extract_json(response.text or "")
         title = str(data.get("title", "")).strip() or fallback["title"]
         tags = [
             str(t).strip().lstrip("#").strip()[:40]

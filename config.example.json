@@ -23,6 +23,62 @@
   },
   "logo_path": "assets/logo.png",
   "image_mode": "local",
+  "ai": {
+    "provider": "gemini",
+    "model": "gemini-2.5-flash",
+    "fallback_order": [
+      "gemini",
+      "openrouter",
+      "grok",
+      "nvidia",
+      "zen",
+      "deepseek",
+      "ollama",
+      "openai"
+    ],
+    "providers": {
+      "gemini": {
+        "api_key_secret": "gemini_api_key",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "model": "gemini-2.5-flash"
+      },
+      "openrouter": {
+        "api_key_secret": "openrouter_api_key",
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": "meta-llama/llama-3.3-70b-instruct:free"
+      },
+      "ollama": {
+        "api_key_secret": null,
+        "base_url": "http://localhost:11434/v1",
+        "model": "llama3.1"
+      },
+      "grok": {
+        "api_key_secret": "xai_api_key",
+        "base_url": "https://api.x.ai/v1",
+        "model": "grok-3-mini"
+      },
+      "nvidia": {
+        "api_key_secret": "nvidia_api_key",
+        "base_url": "https://integrate.api.nvidia.com/v1",
+        "model": "meta-llama/Llama-3.3-70B-Instruct"
+      },
+      "zen": {
+        "api_key_secret": "zai_api_key",
+        "base_url": "https://api.z.ai/api/paas/v4",
+        "model": "glm-4.5-flash"
+      },
+      "openai": {
+        "api_key_secret": "openai_api_key",
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4o-mini"
+      },
+      "deepseek": {
+        "api_key_secret": "deepseek_api_key",
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-chat"
+      }
+    }
+  },
   "manual_schedule": {
     "mode": "slots",
     "slots": ["04:00", "20:00"],

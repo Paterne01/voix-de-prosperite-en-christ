@@ -4,15 +4,14 @@ import argparse
 import sys
 from datetime import datetime
 
+from src.console import configure_console
 from src.jobs import matching_formats, run_slot
 from src.scheduler_log import log_run
 
 
 @log_run("run_job")
 def _run() -> None:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    configure_console()
     # Imports déplacés ici volontairement : si config.py, service.py ou une
     # dépendance échoue à l'import (ex. module manquant, config.json invalide),
     # l'exception est désormais capturée et journalisée par @log_run au lieu de
@@ -28,8 +27,20 @@ def _run() -> None:
                         help="Publie les fichiers importés (assets/pending) aux créneaux manuels dus")
     parser.add_argument("--format", choices=("video", "declaration"), default=None,
                         help="Force un format (défaut : ceux des formats actifs du créneau)")
+    parser.add_argument("--check-ai", action="store_true",
+                        help="Teste chaque fournisseur d'IA configuré et affiche celui qui répond")
     args = parser.parse_args()
     config = load_config()
+
+    if args.check_ai:
+        from src.llm import check_provider, ordered_providers
+
+        print(f"Provider principal configuré : {config.get('ai', {}).get('provider', 'gemini')}")
+        for provider in ordered_providers(config):
+            ok, message = check_provider(config, provider.name)
+            print(("OK  " if ok else "FAIL") + f"  {message}")
+        return
+
     service = PublicationService(config, setup_logging(config))
     database = service.database
     # Migration : crée les deux formats par défaut si la table post_formats est vide.

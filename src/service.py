@@ -58,8 +58,8 @@ class PublicationService:
     def __init__(self, config: dict, logger):
         self.config, self.logger = config, logger
         self.database = HistoryDatabase(absolute_path(config["paths"]["database"]))
-        self.content_generator = ContentGenerator(self.database)
-        self.declaration_generator = DeclarationGenerator(self.database)
+        self.content_generator = ContentGenerator(self.database, config)
+        self.declaration_generator = DeclarationGenerator(self.database, config)
         self.images = ImageService(config)
 
     # ── helpers ──────────────────────────────────────────────────────

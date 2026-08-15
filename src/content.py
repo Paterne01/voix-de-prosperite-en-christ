@@ -6,9 +6,8 @@ import re
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
-from google import genai
-
 from .hf_text import generate_json as hf_generate_json
+from .llm import LLMError, generate_with_fallback, ordered_providers
 from .secrets import get_secret
 
 PILLARS = [
@@ -331,31 +330,33 @@ def _build_hashtags(pillar: str, topic: str, rng: random.Random) -> list[str]:
 
 
 class ContentGenerator:
-    def __init__(self, database):
+    def __init__(self, database, config: dict | None = None):
         self.database = database
+        self.config = config  # utilisé par le client LLM multi-fournisseurs
 
     def generate(self, prompt: str | None = None, pillar: str | None = None) -> Content:
+        """Génère un Contenu via les providers LLM configurés, puis HF, puis local."""
         exclusions = {field: sorted(self.database.recent_values(field))[-180:] for field in ("title", "topic", "verse_reference", "cta", "decor")}
         hook_type = self._pick_hook_type()
-        key = get_secret("gemini_api_key")
-        if key:
+        providers = ordered_providers(self.config or {}) if self.config else []
+        if providers:
             last_exc: Exception | None = None
-            # Jusqu'à 5 brouillons Gemini. Si un brouillon est rejeté (doublon ou
-            # nombre de points incohérent), on redonne la raison à Gemini pour
-            # qu'il corrige explicitement, avant de basculer sur le brouillon local.
+            # Jusqu'à 5 brouillons LLM. Si un brouillon est rejeté (doublon ou
+            # nombre de points incohérent), on redonne la raison au fournisseur
+            # pour qu'il corrige explicitement, avant de basculer sur HF puis local.
             for attempt in range(5):
                 try:
-                    return self._gemini(key, exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, hook_type=hook_type, pillar=pillar)
+                    return self._llm(providers, exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, hook_type=hook_type, pillar=pillar)
                 except Exception as exc:
                     last_exc = exc
-            # Gemini épuisé (quota/erreur) : on passe à Hugging Face avant le local.
+            # LLM épuisé (quota/erreur) : on passe à Hugging Face avant le local.
             try:
                 return self._huggingface(exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, hook_type=hook_type, pillar=pillar)
             except Exception as hf_exc:
                 last_exc = hf_exc
             # A local draft keeps testing and recovery possible; publishing still records the source in logs.
             return self._local(exclusions, warning=str(last_exc), hook_type=hook_type, pillar=pillar)
-        # Pas de clé Gemini : Hugging Face d'abord, local seulement si HF échoue.
+        # Pas de provider LLM configuré : Hugging Face d'abord, local si HF échoue.
         try:
             return self._huggingface(exclusions, prompt=prompt, hook_type=hook_type, pillar=pillar)
         except Exception as hf_exc:
@@ -367,7 +368,9 @@ class ContentGenerator:
         pool = [(key, label) for key, label in HOOK_TYPES if key not in recent] or HOOK_TYPES
         return random.choice(pool)
 
-    def _gemini(self, key: str, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, hook_type: tuple[str, str] | None = None, pillar: str | None = None) -> Content:
+    def _llm(self, providers, exclusions, avoid: str | None = None, prompt: str | None = None, hook_type=None, pillar: str | None = None) -> Content:
+        from .llm import generate_with_fallback
+
         pillar = pillar or random.choice(PILLARS)
         hook_key, hook_label = hook_type or random.choice(HOOK_TYPES)
         system_prompt = prompt or SYSTEM_PROMPT
@@ -385,10 +388,8 @@ class ContentGenerator:
                 "que le nombre annoncé dans le titre égale exactement le nombre de points. "
                 "Aucun élément interdit ci-dessus."
             )
-        client = genai.Client(api_key=key)
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt_text)
-        raw = response.text.strip().removeprefix("```json").removesuffix("```").strip()
-        data = json.loads(raw)
+        data, provider_name = generate_with_fallback(self.config, system_prompt, prompt_text, do_json=True)
+        self._last_provider = provider_name
         data["hashtags"] = normalize_hashtags(
             data.get("hashtags"),
             fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),
@@ -484,20 +485,20 @@ class ContentGenerator:
         )
 
     def _score_engagement(self, content: Content, key: str | None = None) -> int | None:
-        """Note d'engagement (1-10) du brouillon, via un court appel Gemini.
+        """Note d'engagement (1-10) du brouillon, via un court appel LLM.
 
         Appelée uniquement si le service autorise le scoring (config
-        `engagement_score`) sinon le quota gratuit Gemini de 20 requêtes/jour
-        serait dépassé par les posts automatiques. Ne lève JAMAIS : un échec
-        renvoie None et la publication continue normalement.
+        `engagement_score`) sinon le quota gratuit des providers (ex. 20
+        requêtes/jour sur Gemini) serait dépassé par les posts automatiques.
+        Ne lève JAMAIS : un échec renvoie None et la publication continue.
         """
         if not key:
             key = get_secret("gemini_api_key")
-        if not key:
+        if not key and not self.config:
+            return None
+        if not ordered_providers(self.config or {}):
             return None
         try:
-            from google import genai
-
             prompt = (
                 "Tu es un rédacteur social. Note de 1 à 10 (un entier seul, "
                 "rien d'autre) la capacité d'engagement de ce post Facebook "
@@ -509,9 +510,14 @@ class ContentGenerator:
                 f"CTA : {content.cta}\n"
                 f"HASHTAGS : {' '.join(content.hashtags)}"
             )
-            client = genai.Client(api_key=key)
-            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-            score = int((response.text or "").strip()[:2])
+            raw, _provider = generate_with_fallback(
+                self.config or {},
+                "Réponds EXCLUSIVEMENT par un entier unique (1 à 10).",
+                prompt,
+                do_json=False,
+                max_tokens=8,
+            )
+            score = int(str(raw).strip()[:2])
             return score if 1 <= score <= 10 else None
         except Exception:
             return None

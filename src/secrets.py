@@ -14,6 +14,12 @@ except ImportError:  # python-dotenv absent : le fallback .env devient indisponi
 SERVICE_NAME = "voix-prosperite-en-christ"
 SECRET_NAMES = (
     "gemini_api_key",
+    "openrouter_api_key",
+    "xai_api_key",
+    "nvidia_api_key",
+    "zai_api_key",
+    "openai_api_key",
+    "deepseek_api_key",
     "facebook_page_token",
     "huggingface_token",
     "tiktok_client_key",
