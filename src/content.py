@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
 from .hf_text import generate_json as hf_generate_json
-from .llm import LLMError, generate_with_fallback, ordered_providers
+from .llm import generate_with_fallback, ordered_providers
 
 PILLARS = [
     "Dignité", "Sagesse", "Libération", "Productivité", "Restauration relationnelle",
