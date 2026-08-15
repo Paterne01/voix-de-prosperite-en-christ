@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 from .content import normalize_hashtags
 from .hf_text import generate_json as hf_generate_json
-from .llm import generate_with_fallback, ordered_providers
+from .llm import ordered_providers
 from .secrets import get_secret
 
 PILLARS = [
@@ -215,15 +215,13 @@ class DeclarationGenerator:
             field: sorted(self.database.recent_values(field))[-50:]
             for field in ("title", "topic", "verse_reference", "cta")
         }
-        providers = ordered_providers(self.config or {}) if self.config else []
-        if providers:
+        if ordered_providers(self.config or {}):
             last_exc: Exception | None = None
-            for attempt in range(4):
-                try:
-                    return self._llm(providers, exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, pillar=pillar)
-                except Exception as exc:
-                    last_exc = exc
-            # LLM épuisé : repli Hugging Face avant le générateur local.
+            try:
+                return self._llm(exclusions, prompt=prompt, pillar=pillar)
+            except Exception as exc:
+                last_exc = exc
+            # Tous les providers LLM (avec clé) ont échoué : repli Hugging Face.
             try:
                 return self._huggingface(exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, pillar=pillar)
             except Exception as hf_exc:
@@ -235,28 +233,44 @@ class DeclarationGenerator:
         except Exception as hf_exc:
             return self._local(exclusions, warning=str(hf_exc), pillar=pillar)
 
-    def _llm(self, providers, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, pillar: str | None = None) -> Declaration:
+    def _llm(self, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, pillar: str | None = None) -> Declaration:
+        from .llm import generate_with_retry
+
         pillar = pillar or random.choice(PILLARS)
         system_prompt = prompt or SYSTEM_PROMPT_DECLARATION
-        prompt_text = (
-            f"{system_prompt}\n"
-            f"Pilier obligatoire : {pillar}.\n"
-            f"Éléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
-        )
-        if avoid:
-            prompt_text += (
-                f"\nTon brouillon précédent a été rejeté pour ce motif : {avoid}.\n"
-                "Corrige-le : prend un AUTRE verset, une AUTRE reformulation de « declarare »."
+
+        def build_prompt(avoid_override: str | None = None) -> str:
+            text = (
+                f"{system_prompt}\n"
+                f"Pilier obligatoire : {pillar}.\n"
+                f"Éléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
             )
-        data, provider_name = generate_with_fallback(self.config, system_prompt, prompt_text, do_json=True)
-        self._last_provider = provider_name
-        data["hashtags"] = normalize_hashtags(
-            data.get("hashtags"),
-            fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),
+            reason = avoid_override or avoid
+            if reason:
+                text += (
+                    f"\nTon brouillon précédent a été rejeté pour ce motif : {reason}.\n"
+                    "Corrige-le : prend un AUTRE verset, une AUTRE reformulation de « declarare »."
+                )
+            return text
+
+        def normalize(data: dict) -> Declaration:
+            data["hashtags"] = normalize_hashtags(
+                data.get("hashtags"),
+                fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),
+            )
+            content = Declaration(**{field: data[field] for field in Declaration.__dataclass_fields__})
+            self._validate(content, exclusions)
+            return content
+
+        data, provider_name = generate_with_retry(
+            self.config,
+            system_prompt,
+            build_prompt,
+            validate=normalize,
+            do_json=True,
         )
-        content = Declaration(**{field: data[field] for field in Declaration.__dataclass_fields__})
-        self._validate(content, exclusions)
-        return content
+        self._last_provider = provider_name
+        return normalize(data)
 
     def _huggingface(self, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, pillar: str | None = None) -> Declaration:
         """Repli IA via Hugging Face (Mistral-7B-Instruct) quand Gemini est hors ligne."""

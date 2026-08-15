@@ -287,6 +287,89 @@ def generate_with_fallback(
     raise LLMError(f"Tous les fournisseurs ont échoué ({detail}) : {last_error}", detail, last_error) from last_error
 
 
+def _is_exhausted_error(exc: Exception) -> bool:
+    """Vrai quand re-tenter CE provider est inutile sur le court terme.
+
+    Couvre les erreurs de crédits/quota/abonnement, les clés invalides ou sans
+    permission, et les sorties non-JSON (le modèle ne produit pas de JSON dès
+    maintenant). Les erreurs transitoires (timeout) restent réessayables.
+    """
+    low = " ".join(
+        str(part)
+        for part in (str(exc), getattr(exc, "provider", "") or "", getattr(exc, "reply_tag", "") or "")
+        if part
+    ).lower()
+    markers = (
+        "429", "quota", "rate limit", "ratelimit", "resource_exhausted",
+        "insufficient", "credit", "billing", "payment required", "limit exceeded",
+        "invalid_api_key", "invalid api key", "api key not", "unauthorized",
+        "authentication", "401", "forbidden", "permission denied", "aucune clé configurée",
+        "json invalide", "réponse vide", "réponse non json", "token",
+    )
+    return any(m in low for m in markers)
+
+
+def generate_with_retry(
+    config: dict[str, Any],
+    system_prompt: str,
+    build_prompt,
+    validate=None,
+    *,
+    do_json: bool = True,
+    max_attempts: int = 5,
+    temperature: float = 0.75,
+    max_tokens: int = MAX_TOKENS,
+) -> tuple[dict | str, str]:
+    """Génère via les providers à clé, avec gestion des crédits/quota.
+
+    Comportement voulu :
+    - Un provider qui échoue pour des RÉASONS DE CRÉDITS/quota/permission/clé
+      est définitivement écarté pour la génération en cours (pas de re-tentative
+      inutile sur un compte à sec) : on passe au provider suivant.
+    - Une erreur de VALIDATION (brouillon rejeté) reformule le prompt via
+      `build_prompt(avoid=...)` et re-tente les providers encore valides.
+    - Ne lève LLMError que quand TOUS les providers configurés (avec clé) ont
+      échoué : c'est l'appelant qui décide ensuite de basculer HF puis local.
+
+    `build_prompt(avoid: str | None) -> str` construit le prompt utilisateur
+    (optionnellement corrigé après un rejet). `validate(data)` doit lever
+    ValueError quand le brouillon est inacceptable (doublon, format...).
+
+    Renvoie (data, provider_name).
+    """
+    providers = ordered_providers(config)
+    if not providers:
+        raise LLMError("Aucun provider LLM configuré", "none")
+    dead: set[str] = set()
+    last_error: Exception | None = None
+    attempted: list[str] = []
+    for provider in providers:
+        if provider.name not in dead:
+            attempted.append(provider.name)
+    for _ in range(max_attempts):
+        for provider in providers:
+            if provider.name in dead:
+                continue
+            try:
+                prompt_text = build_prompt(avoid=str(last_error) if last_error else None)
+                if do_json:
+                    data = chat_json(provider, system_prompt, prompt_text, temperature=temperature, max_tokens=max_tokens)
+                else:
+                    data = chat(provider, system_prompt, prompt_text, json_mode=False, temperature=temperature, max_tokens=max_tokens)
+                if validate is not None:
+                    validate(data)
+                return data, provider.name
+            except ValueError as exc:
+                # Brouillon rejeté (doublon, points incohérents) : on reformule.
+                last_error = exc
+            except Exception as exc:
+                last_error = exc
+                if _is_exhausted_error(exc):
+                    dead.add(provider.name)
+    detail = " ; ".join(attempted) if attempted else "aucun provider configuré"
+    raise LLMError(f"Tous les fournisseurs ont échoué ({detail}) : {last_error}", detail, last_error) from last_error
+
+
 def check_provider(config: dict[str, Any], name: str | None = None, *, system_prompt: str = "Réponds uniquement par le mot OK.", prompt_text: str = "Dis OK.", timeout: int = 60) -> tuple[bool, str]:
     """Teste qu'un provider/réponse est joignable. (bool ok, message)."""
     provider = to_provider(name or _resolve_provider_name(config), config)

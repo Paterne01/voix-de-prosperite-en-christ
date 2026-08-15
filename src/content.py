@@ -334,26 +334,26 @@ class ContentGenerator:
         self.config = config  # utilisé par le client LLM multi-fournisseurs
 
     def generate(self, prompt: str | None = None, pillar: str | None = None) -> Content:
-        """Génère un Contenu via les providers LLM configurés, puis HF, puis local."""
+        """Génère un Contenu via les providers LLM configurés, puis HF, puis local.
+
+        La recherche de brouillon acceptable (doublons, points incohérents) vit
+        dans `_llm` via `generate_with_retry`. Le mode local n'est atteint que
+        si TOUS les providers LLM configurés (avec clé) ont échoué, puis HF.
+        """
         exclusions = {field: sorted(self.database.recent_values(field))[-180:] for field in ("title", "topic", "verse_reference", "cta", "decor")}
         hook_type = self._pick_hook_type()
-        providers = ordered_providers(self.config or {}) if self.config else []
-        if providers:
+        if ordered_providers(self.config or {}):
             last_exc: Exception | None = None
-            # Jusqu'à 5 brouillons LLM. Si un brouillon est rejeté (doublon ou
-            # nombre de points incohérent), on redonne la raison au fournisseur
-            # pour qu'il corrige explicitement, avant de basculer sur HF puis local.
-            for attempt in range(5):
-                try:
-                    return self._llm(providers, exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, hook_type=hook_type, pillar=pillar)
-                except Exception as exc:
-                    last_exc = exc
-            # LLM épuisé (quota/erreur) : on passe à Hugging Face avant le local.
+            try:
+                return self._llm(exclusions, prompt=prompt, hook_type=hook_type, pillar=pillar)
+            except Exception as exc:
+                last_exc = exc
+            # Tous les providers LLM (avec clé) ont échoué : repli Hugging Face.
             try:
                 return self._huggingface(exclusions, avoid=str(last_exc) if last_exc else None, prompt=prompt, hook_type=hook_type, pillar=pillar)
             except Exception as hf_exc:
                 last_exc = hf_exc
-            # A local draft keeps testing and recovery possible; publishing still records the source in logs.
+            # Dernier recours : générateur local déterministe (tests/reprise quota).
             return self._local(exclusions, warning=str(last_exc), hook_type=hook_type, pillar=pillar)
         # Pas de provider LLM configuré : Hugging Face d'abord, local si HF échoue.
         try:
@@ -367,37 +367,51 @@ class ContentGenerator:
         pool = [(key, label) for key, label in HOOK_TYPES if key not in recent] or HOOK_TYPES
         return random.choice(pool)
 
-    def _llm(self, providers, exclusions, avoid: str | None = None, prompt: str | None = None, hook_type=None, pillar: str | None = None) -> Content:
-        from .llm import generate_with_fallback
+    def _llm(self, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, hook_type=None, pillar: str | None = None) -> Content:
+        from .llm import generate_with_retry
 
         pillar = pillar or random.choice(PILLARS)
         hook_key, hook_label = hook_type or random.choice(HOOK_TYPES)
         system_prompt = prompt or SYSTEM_PROMPT
-        prompt_text = (
-            f"{system_prompt}\nPilier obligatoire : {pillar}.\n"
-            f"Type d'accroche IMPOSÉ pour le champ \"hook\" : « {hook_label} » "
-            f"(clé : {hook_key}). Construis le hook selon ce type, sans jamais le nommer.\n"
-            f"Éléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
-        )
-        if avoid:
-            prompt_text += (
-                f"\nTon brouillon précédent a été rejeté pour ce motif : {avoid}.\n"
-                "Corrige-le maintenant : choisis un AUTRE verset, une accroche du même type "
-                "mais avec une formulation différente, un autre appel à l'action, et vérifie "
-                "que le nombre annoncé dans le titre égale exactement le nombre de points. "
-                "Aucun élément interdit ci-dessus."
+
+        def build_prompt(avoid_override: str | None = None) -> str:
+            text = (
+                f"{system_prompt}\nPilier obligatoire : {pillar}.\n"
+                f"Type d'accroche IMPOSÉ pour le champ \"hook\" : « {hook_label} » "
+                f"(clé : {hook_key}). Construis le hook selon ce type, sans jamais le nommer.\n"
+                f"Éléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
             )
-        data, provider_name = generate_with_fallback(self.config, system_prompt, prompt_text, do_json=True)
-        self._last_provider = provider_name
-        data["hashtags"] = normalize_hashtags(
-            data.get("hashtags"),
-            fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),
+            reason = avoid_override or avoid
+            if reason:
+                text += (
+                    f"\nTon brouillon précédent a été rejeté pour ce motif : {reason}.\n"
+                    "Corrige-le maintenant : choisis un AUTRE verset, une accroche du même type "
+                    "mais avec une formulation différente, un autre appel à l'action, et vérifie "
+                    "que le nombre annoncé dans le titre égale exactement le nombre de points. "
+                    "Aucun élément interdit ci-dessus."
+                )
+            return text
+
+        def normalize(data: dict) -> Content:
+            data["hashtags"] = normalize_hashtags(
+                data.get("hashtags"),
+                fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),
+            )
+            data["hook_type"] = hook_key
+            data.setdefault("engagement_score", None)
+            content = Content(**{field: data[field] for field in Content.__dataclass_fields__})
+            self._validate(content, exclusions)
+            return content
+
+        data, provider_name = generate_with_retry(
+            self.config,
+            system_prompt,
+            build_prompt,
+            validate=normalize,
+            do_json=True,
         )
-        data["hook_type"] = hook_key
-        data.setdefault("engagement_score", None)
-        content = Content(**{field: data[field] for field in Content.__dataclass_fields__})
-        self._validate(content, exclusions)
-        return content
+        self._last_provider = provider_name
+        return normalize(data)
 
     def _huggingface(self, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, hook_type: tuple[str, str] | None = None, pillar: str | None = None) -> Content:
         """Repli IA via Hugging Face (Mistral-7B-Instruct) quand Gemini est hors ligne."""
