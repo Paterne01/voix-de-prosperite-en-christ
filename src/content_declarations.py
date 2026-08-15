@@ -239,16 +239,15 @@ class DeclarationGenerator:
         pillar = pillar or random.choice(PILLARS)
         system_prompt = prompt or SYSTEM_PROMPT_DECLARATION
 
-        def build_prompt(avoid_override: str | None = None) -> str:
+        def build_prompt(avoid: str | None = None) -> str:
             text = (
                 f"{system_prompt}\n"
                 f"Pilier obligatoire : {pillar}.\n"
                 f"Éléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
             )
-            reason = avoid_override or avoid
-            if reason:
+            if avoid:
                 text += (
-                    f"\nTon brouillon précédent a été rejeté pour ce motif : {reason}.\n"
+                    f"\nTon brouillon précédent a été rejeté pour ce motif : {avoid}.\n"
                     "Corrige-le : prend un AUTRE verset, une AUTRE reformulation de « declarare »."
                 )
             return text

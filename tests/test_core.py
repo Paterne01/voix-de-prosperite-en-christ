@@ -231,3 +231,78 @@ def test_image_intro_outro_converted_and_cleaned(tmp_path):
     assert _has_audio(out)
     leftovers = [p.name for p in tmp_path.iterdir() if p.name.startswith("tmp_")]
     assert not leftovers, f"clips temporaires non purgés : {leftovers}"
+
+
+def _valid_content_data(provider_name="openrouter"):
+    return {
+        "title": f"3 clés pour agir ce matin {provider_name}",
+        "topic": f"Sagesse pratique {provider_name}",
+        "hook": "Et si la sagesse commençait là où tu l'attends le moins ?",
+        "pillar": "Sagesse",
+        "verse_reference": "Jacques 1:5",
+        "cta": "Commente ta prochaine étape.",
+        "decor": "table en bois à l'aube, lumière chaude",
+        "image_prompt": "Scene premium: wooden table at dawn, warm light, no text.",
+        "hashtags": ["#VoixDeProspéritéEnChrist", "#Sagesse", "#Foi", "#Motivation", "#Espérance"],
+        "points": [
+            {"heading": "Un", "body": "Observe avant d'agir.", "application": "Note ce que tu vois."},
+            {"heading": "Deux", "body": "Demande avant de parler.", "application": "Questionne."},
+            {"heading": "Trois", "body": "Agis après avoir pesé.", "application": "Passe à l'action."},
+        ],
+        "engagement_score": 7,
+        "truth": "La sagesse commence par demander.",
+    }
+
+
+def test_generate_uses_next_provider_when_gemini_quota_exhausted(monkeypatch, tmp_path):
+    """Gemini en quota (429) : OpenRouter prend le relais, le local n'est PAS utilisé."""
+    from src import llm as llm_module
+    from src.llm import LLMError
+
+    monkeypatch.setattr(
+        "src.llm.get_secret",
+        lambda key: "k" if key in ("gemini_api_key", "openrouter_api_key") else None,
+    )
+    config = {"ai": {"provider": "gemini", "fallback_order": ["openrouter", "ollama"]}}
+    calls: list[str] = []
+
+    def fake_chat_json(provider, system_prompt, prompt_text, **kwargs):
+        calls.append(provider.name)
+        if provider.name == "gemini":
+            raise LLMError("429 quota dépassé (limite gratuite)", provider.name)
+        return _valid_content_data(provider_name=provider.name)
+
+    monkeypatch.setattr(llm_module, "chat_json", fake_chat_json)
+    db = HistoryDatabase(tmp_path / "history.sqlite3")
+    generator = ContentGenerator(db, config=config)
+    content = generator.generate(prompt="SYSTÈME", pillar="Sagesse")
+    assert content.topic == "Sagesse pratique openrouter"
+    assert generator._last_provider == "openrouter"
+    assert "openrouter" in calls and "gemini" in calls
+    assert calls[0] == "gemini"
+    assert calls[1] == "openrouter"
+    assert len(calls) <= 2  # pas de boucle inutile sur gemini
+
+
+def test_generate_uses_local_only_when_all_keyed_providers_fail(monkeypatch, tmp_path):
+    """Tous les providers à clé échouent : seul le local reste (via HF absent)."""
+    from src import llm as llm_module
+    from src.llm import LLMError
+
+    monkeypatch.setattr(
+        "src.llm.get_secret",
+        lambda key: "k" if key == "gemini_api_key" else None,
+    )
+    config = {"ai": {"provider": "gemini", "fallback_order": ["openrouter", "ollama"]}}
+
+    def fake_chat_json(provider, system_prompt, prompt_text, **kwargs):
+        raise LLMError(f"{provider.name} : erreur", provider.name)
+
+    monkeypatch.setattr(llm_module, "chat_json", fake_chat_json)
+    # Pas de jeton HF : _huggingface lève, on doit retomber sur le local.
+    monkeypatch.setattr("src.content.hf_generate_json", lambda **kw: (_ for _ in ()).throw(RuntimeError("pas de jeton")))
+    db = HistoryDatabase(tmp_path / "history.sqlite3")
+    generator = ContentGenerator(db, config=config)
+    content = generator.generate(prompt="SYSTÈME")
+    assert content.pillar in DEFAULT_WEEK_PILLARS.values()
+    assert content.title.startswith(("{", "[")) or "clés pour" in content.title

@@ -374,17 +374,16 @@ class ContentGenerator:
         hook_key, hook_label = hook_type or random.choice(HOOK_TYPES)
         system_prompt = prompt or SYSTEM_PROMPT
 
-        def build_prompt(avoid_override: str | None = None) -> str:
+        def build_prompt(avoid: str | None = None) -> str:
             text = (
                 f"{system_prompt}\nPilier obligatoire : {pillar}.\n"
                 f"Type d'accroche IMPOSÉ pour le champ \"hook\" : « {hook_label} » "
                 f"(clé : {hook_key}). Construis le hook selon ce type, sans jamais le nommer.\n"
                 f"Éléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
             )
-            reason = avoid_override or avoid
-            if reason:
+            if avoid:
                 text += (
-                    f"\nTon brouillon précédent a été rejeté pour ce motif : {reason}.\n"
+                    f"\nTon brouillon précédent a été rejeté pour ce motif : {avoid}.\n"
                     "Corrige-le maintenant : choisis un AUTRE verset, une accroche du même type "
                     "mais avec une formulation différente, un autre appel à l'action, et vérifie "
                     "que le nombre annoncé dans le titre égale exactement le nombre de points. "
