@@ -233,7 +233,12 @@ def chat(
     message = choices[0].get("message") or {}
     content = message.get("content")
     if not isinstance(content, str) or not content.strip():
-        raise LLMError(f"Contenu vide de {provider.name}", provider.name)
+        finish = choices[0].get("finish_reason")
+        detail = body.get("usage") or {}
+        raise LLMError(
+            f"Contenu vide de {provider.name} ({provider.model}, finish={finish}, usage={detail})",
+            provider.name,
+        )
     return content.strip()
 
 

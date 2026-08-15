@@ -492,10 +492,6 @@ class ContentGenerator:
         requêtes/jour sur Gemini) serait dépassé par les posts automatiques.
         Ne lève JAMAIS : un échec renvoie None et la publication continue.
         """
-        if not key:
-            key = get_secret("gemini_api_key")
-        if not key and not self.config:
-            return None
         if not ordered_providers(self.config or {}):
             return None
         try:
