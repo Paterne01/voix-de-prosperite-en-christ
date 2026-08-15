@@ -87,24 +87,89 @@ CAPTION_CLOSERS = [
     "",
 ]
 
-# Points génériques pour le générateur local : le nombre de points retenus doit
-# TOUJOURS égaler le nombre annoncé dans le titre (voir _validate).
-LOCAL_POINTS = [
-    ("Commence avec ce qui t'est confié", "La fidélité se construit dans les petites responsabilités.", "Chez toi, choisis une action utile à terminer aujourd'hui."),
-    ("Cherche la sagesse avant la précipitation", "Une décision paisible vaut mieux qu'une solution rapide sans discernement.", "Chez toi, prends un temps de prière et note tes options."),
-    ("Fais du bien autour de toi", "La prospérité biblique produit du fruit qui bénit aussi les autres.", "Chez toi, encourage ou aide concrètement une personne cette semaine."),
-    ("Garde tes engagements", "Tenir parole construit la confiance, avec les autres et avec Dieu.", "Chez toi, note tes promesses de la semaine et honore-les une par une."),
-    ("Apprends à dire non", "Tout ce qui est bon n'est pas forcément ta priorité.", "Chez toi, refuse un engagement qui n'apporte rien à ta mission."),
-    ("Médite la Parole avant d'agir", "Ce que tu remplis ton cœur en premier guide tes décisions.", "Chez toi, lis un verset le matin et laisse-le guider ta journée."),
-    ("Investis dans les relations", "Ton réseau n'est pas qu'un carnet d'adresses : c'est un terrain de service.", "Chez toi, appelle quelqu'un pour prendre de ses nouvelles."),
-    ("Gère ce que tu as, même peu", "La gestion de la petite somme prépare la confiance pour la grande.", "Chez toi, fais un état des lieux de tes finances de la semaine."),
-    ("Agis pendant que c'est le jour", "L'occasion ne t'attend pas indéfiniment.", "Chez toi, avance aujourd'hui sur la tâche que tu remets depuis longtemps."),
-    ("Entoure-toi de bons conseils", "La sagesse se reçoit dans l'humilité, pas dans l'isolement.", "Chez toi, demande l'avis d'un aîné de confiance avant de trancher."),
-    ("Garde la paix dans les épreuves", "Dieu n'est pas absent quand c'est dur, il travaille dans le calme.", "Chez toi, remplace la plainte par une prière de gratitude."),
-    ("Rends grâce en toute saison", "Un cœur reconnaissant garde la porte ouverte à la provision.", "Chez toi, écris trois choses pour lesquelles tu remercies Dieu aujourd'hui."),
-    ("Travaille avec soin", "Le travail bien fait est une forme de culte.", "Chez toi, soigne le dernier détail de ton travail avant de le livrer."),
-    ("Laisse Dieu agir à son rythme", "Ta précipitation n'accélère jamais Son plan, elle l'encombre.", "Chez toi, dépose un souci qui te presse et attends Sa paix."),
-]
+# Points pour le générateur local : banque PAR PILIER, pour que le commentaire
+# reste toujours lié au point du jour ET au texte affiché sur l'image (titre +
+# accroche). Le nombre de points retenus doit TOUJOURS égaler le nombre annoncé
+# dans le titre (voir _validate). Vocabulaire oral façon réseaux sociaux (« toi »,
+# « Chez toi, … ») comme le prompt IA.
+LOCAL_BANK = {
+    "Dignité": [
+        ("Retrouve ta valeur en Christ", "Ton manque ne définit pas qui tu es : tu es cher, appelé et relevé par Dieu.", "Chez toi, écris ce soir trois vérités sur ta valeur et lis-les à voix haute."),
+        ("Arrête de te comparer aux autres", "La comparaison vole ta paix et ton énergie, pas tes résultats.", "Chez toi, ferme les réseaux matière pour te concentrer sur TON avancement."),
+        ("Refuse les étiquettes du passé", "Ce que les autres ont dit sur toi n'est pas le dernier mot de Dieu.", "Chez toi, note une étiquette qu'on t'a collée et remplace-la par une vérité biblique."),
+        ("Traite-toi avec respect", "Ta dignité se voit dans la façon dont tu parles de toi et à toi.", "Chez toi, remplace une parole négative sur toi par une parole de bénédiction."),
+        ("Porte la tête haute", "La honte ne rend personne plus fort ; l'orgueil sain si.", "Chez toi, viens aujourd'hui avec une posture digne, même si tes finances tardent."),
+        ("Agis en enfant de Dieu", "Ton identité précède ta situation : tu n'es pas défini par ton compte en banque.", "Chez toi, accomplit une tâche avec l'assurance d'un enfant aimé de Dieu."),
+        ("Sors de la mentalité d'indigent", "Dieu avait un plan pour toi bien avant ta naissance.", "Chez toi, médite Ésaïe 61:1-2 et demande ce que Dieu pense de toi."),
+    ],
+    "Sagesse": [
+        ("Cherche la sagesse avant la précipitation", "Une décision paisible vaut mieux qu'une solution rapide sans discernement.", "Chez toi, prends un temps de prière et note tes options."),
+        ("Apprends à dire non", "Tout ce qui est bon n'est pas forcément ta priorité.", "Chez toi, refuse un engagement qui n'apporte rien à ta mission."),
+        ("Médite la Parole avant d'agir", "Ce que tu remplis ton cœur en premier guide tes décisions.", "Chez toi, lis un verset le matin et laisse-le guider ta journée."),
+        ("Entoure-toi de bons conseils", "La sagesse se reçoit dans l'humilité, pas dans l'isolement.", "Chez toi, demande l'avis d'un aîné avant de trancher."),
+        ("Compte avant de souscrire", "S'endetter pour « faire comme les autres » est un piège classique.", "Chez toi, fais le calcul complet avant d'accepter un crédit."),
+        ("Gère ce que tu as, même peu", "La gestion honnête de la petite somme prépare la grande.", "Chez toi, fais un état des lieux de tes finances de la semaine."),
+        ("Investis dans ce qui compte", "Tout investissement ne produit pas du fruit ; choisis avec discernement.", "Chez toi, note ce qui rapporte vraiment et coupe ce qui te draine."),
+    ],
+    "Libération": [
+        ("Garde la paix dans les épreuves", "Dieu travaille dans le calme, pas dans la panique.", "Chez toi, remplace la plainte par une prière de gratitude."),
+        ("Coupe avec la peur de l'échec", "La peur d'échouer t'a plus bloqué que l'échec lui-même.", "Chez toi, fais aujourd'hui la chose que tu remets par crainte."),
+        ("Laisse tomber la honte", "La honte t'isole ; la vérité te libère.", "Chez toi, confie à une personne sûre ce que tu caches depuis longtemps."),
+        ("Brûle les pensées limitantes", "« Je n'y arriverai jamais » est une voix, pas une fatalité.", "Chez toi, remplace cette pensée par une parole de foi concrète."),
+        ("Pardonne pour avancer libre", "L'amertume est une chaîne que tu portes contre toi-même.", "Chez toi, libère une personne par le pardon, en prière."),
+        ("Reprends la maîtrise de ta journée", "Le chaos mental se dissout dans les bonnes habitudes.", "Chez toi, fixe ton lever et une priorité unique pour demain."),
+        ("Sors du fatalisme", "Ton histoire ne détermine pas ton avenir.", "Chez toi, écris une décision que tu remettais par résignation."),
+    ],
+    "Productivité": [
+        ("Commence avec ce qui t'est confié", "La fidélité se construit dans les petites responsabilités.", "Chez toi, choisis une action utile à terminer aujourd'hui."),
+        ("Garde tes engagements", "Tenir parole construit la confiance, avec les autres et avec Dieu.", "Chez toi, note tes promesses de la semaine et honore-les une par une."),
+        ("Agis pendant que c'est le jour", "L'occasion ne t'attend pas indéfiniment.", "Chez toi, avance sur la tâche que tu remets depuis longtemps."),
+        ("Travaille avec soin", "Le travail bien fait est une forme de culte.", "Chez toi, soigne le dernier détail de ton travail avant de le livrer."),
+        ("Termine ce que tu commences", "Un projet fini vaut mieux que dix projets commencés.", "Chez toi, clos un petit dossier resté en suspens cette semaine."),
+        ("Produis avant de consommer", "Dieu te rend capable de créer, pas seulement d'acheter.", "Chez toi, fais quelque chose de tes mains qui peut servir quelqu'un."),
+        ("Respecte tes heures", "La discipline des horaires change la face de ton business.", "Chez toi, bloque un créneau de travail profond pour demain."),
+    ],
+    "Restauration relationnelle": [
+        ("Investis dans les relations", "Ton réseau n'est pas un carnet d'adresses : c'est un terrain de service.", "Chez toi, appelle quelqu'un pour prendre de ses nouvelles."),
+        ("Demande pardon le premier", "Un cœur humble répare ce que l'orgueil a cassé.", "Chez toi, envoie le message de réconciliation que tu remets."),
+        ("Écoute avant de juger", "Beaucoup de disputes meurent quand on écoute vraiment.", "Chez toi, écoute quelqu'un sans l'interrompre, puis réponds avec douceur."),
+        ("Bénis ceux qui t'ont blessé", "La bénédiction désarme les conflits et t'affranchit.", "Chez toi, prie pour une personne avec qui tu es en froid."),
+        ("Choisis bien ton entourage", "Tes fréquentations orientent tes décisions.", "Chez toi, rapproche-toi de quelqu'un qui t'élève, et protège ta paix."),
+        ("Garde la paix de ta maison", "La prospérité sans paix familiale est une prison dorée.", "Chez toi, crée un moment de qualité avec tes proches cette semaine."),
+        ("Sois quelqu'un à qui on peut se confier", "La confiance attire les opportunités et les bénédictions.", "Chez toi, garde le secret qu'on t'a confié et reviens vers la personne."),
+    ],
+    "Provision Active": [
+        ("Réponds par l'action à la provision", "Dieu ouvre les portes ; tes pas les traversent.", "Chez toi, fais aujourd'hui le pas concret que la porte exige."),
+        ("Prépare le terrain avant la moisson", "La provision tombe sur un sol déjà travaillé.", "Chez toi, prépare ton CV, ton offre ou ton lieu avant la porte."),
+        ("Lève la main quand l'opportunité passe", "Beaucoup voient la porte sans oser frapper.", "Chez toi, postule ou présente ton idée cette semaine."),
+        ("Fais fructifier ce qui t'est donné", "Dieu te confie, puis tu multiplies ; c'est la règle des talents.", "Chez toi, prends une ressource que tu négliges et commence à la faire grandir."),
+        ("Mets de l'ordre dans tes finances", "La faveur de Dieu aime les cœurs et les comptes ordonnés.", "Chez toi, établis un premier budget simple ce week-end."),
+        ("Reconnais les aides de Dieu", "La provision passe aussi par les personnes que Dieu t'envoie.", "Chez toi, remercie quelqu'un qui t'a ouvert une porte."),
+        ("Sème des graines d'action", "La foi sans action est un chèque jamais déposé.", "Chez toi, effectue la petite action que tu repousses depuis des semaines."),
+    ],
+    "Générosité": [
+        ("Fais du bien autour de toi", "La prospérité biblique produit du fruit qui bénit aussi les autres.", "Chez toi, encourage ou aide concrètement une personne cette semaine."),
+        ("Partage ce que tu as reçu", "La bénédiction grandit quand elle circule.", "Chez toi, donne du temps ou une ressource à quelqu'un dans le besoin."),
+        ("Deviens une source", "Tu es appelé à devenir celui qui pourvoit, pas seulement celui qui reçoit.", "Chez toi, identifie une personne à qui ton savoir ou ton savoir-faire profiteraient."),
+        ("Donne avec joie", "Dieu aime celui qui donne joyeusement, même peu.", "Chez toi, propose une aide sans attendre de retour."),
+        ("Élève quelqu'un avec toi", "La vraie prospérité fait monter les autres avec elle.", "Chez toi, forme quelqu'un sur une compétence que tu maîtrises."),
+        ("Sème d'abord chez les tiens", "La générosité commence dans ta maison.", "Chez toi, bénis un membre de ta famille de façon concrète."),
+        ("Bénis sans calcul", "Le cœur généreux ne compte pas avant de donner.", "Chez toi, fais aujourd'hui un geste de bonté que personne ne verra."),
+    ],
+}
+
+# Focus du post local : phrases concrètes liant le titre au pilier (sert aussi
+# d'amorce au commentaire pour qu'il suive l'image). Plusieurs focus par pilier
+# pour garantir des titres humains UNIQUES sans « repère N » technique.
+LOCAL_FOCUSES = {
+    "Dignité": ["ta dignité en Christ", "ta valeur retrouvée", "ta place dans le dessein de Dieu", "sortir de la mentalité d'indigent", "parler et agir en enfant de Dieu", "te relever de la misère à la dignité"],
+    "Sagesse": ["la sagesse qui sort du manque", "les décisions éclairées", "la bonne gestion de ce que tu as", "apprendre avant de s'engager", "compter le coût en prière", "recevoir la sagesse pour sortir du manque"],
+    "Libération": ["ta libération des blocages", "briser la peur de l'échec", "la fin des pensées limitantes", "reprendre la maîtrise de ta journée", "la paix au cœur des épreuves", "être libéré des blocages intérieurs"],
+    "Productivité": ["ta capacité à produire", "les fruits de tes mains", "fidèle dans les petites choses", "terminer ce que tu commences", "produire avant de consommer", "être rendu capable de produire"],
+    "Restauration relationnelle": ["tes relations restaurées", "la paix de ta maison", "pardonner pour avancer", "un réseau qui t'élève", "réparer avant de recommencer", "entrer dans des relations restaurées"],
+    "Provision Active": ["ta provision avec action", "les portes que Dieu ouvre", "répondre par l'obéissance", "préparer le terrain de ta moisson", "faire fructifier ce qui t'est donné", "l'accès à une provision avec action humaine"],
+    "Générosité": ["devenir une source pour les autres", "la générosité qui multiplie", "bénir autour de toi", "élever quelqu'un avec toi", "donner avec joie", "devenir à ton tour une source"],
+}
 
 
 @dataclass
@@ -385,25 +450,26 @@ class ContentGenerator:
 
     def _build_local(self, index: int, hook_type: tuple[str, str] | None = None, pillar: str | None = None) -> Content:
         pillar = pillar or PILLARS[index % len(PILLARS)]
-        themes = ["discipline fidèle", "vision de long terme", "gestion responsable", "paix dans les décisions", "service qui crée de la valeur", "générosité intentionnelle", "courage dans l'action"]
-        theme = themes[index % len(themes)]
-        topic = f"{pillar} — {theme} — {index}"
+        focuses = LOCAL_FOCUSES.get(pillar, LOCAL_FOCUSES["Dignité"])
+        focus = focuses[(index // len(PILLARS)) % len(focuses)]
+        bank = LOCAL_BANK.get(pillar, next(iter(LOCAL_BANK.values())))
+        topic = f"{pillar} — {focus} — {index}"
         # UN SEUL nombre pilote à la fois le titre et le nombre de points : jamais
         # deux sources indépendantes (le contrôle _validate le vérifie aussi).
-        count = 3 + index % 5  # 3..7 points, dans la limite éditoriale
-        title = f"{count} pratiques de {theme} : repère {index}"
-        offset = index % (len(LOCAL_POINTS) - 7)
+        count = min(3 + index % 5, len(bank))  # 3..7 points, dans la limite éditoriale
+        offset = index % max(1, len(bank) - count + 1)
         points = [
             {"heading": heading, "body": body, "application": application}
-            for heading, body, application in LOCAL_POINTS[offset:offset + count]
+            for heading, body, application in bank[offset:offset + count]
         ]
+        title = f"{count} clés pour {focus}"
         hook_key, hook_label = hook_type or ("question_pain", "Une question qui fait mal")
         hooks = {
-            "question_pain": f"Tu travailles dur sur {theme} depuis des années, et pourtant tu te demandes encore pourquoi ça ne décolle pas ?",
-            "constat_cache": f"Beaucoup prient pour avancer sur {theme}, mais ont peur en secret d'y croire vraiment.",
-            "contre_intuitif": f"Ce n'est pas ton manque de résultat sur {theme} qui te bloque : c'est ce que tu crois sur toi-même.",
-            "identification": f"Si tu as déjà eu honte de ton retard sur {theme}, ce post est pour toi.",
-            "chiffre": f"Des milliers de personnes abandonnent chaque année sur {theme} à cause d'une seule croyance limitante.",
+            "question_pain": f"Tu travailles dur pour {focus}, et pourtant tu as encore l'impression de ne pas avancer ?",
+            "constat_cache": f"Beaucoup prient pour {focus}, mais ont peur en secret d'y croire vraiment.",
+            "contre_intuitif": f"Ce n'est pas ton manque de moyens qui te bloque sur {focus} : c'est ce que tu crois sur toi-même.",
+            "identification": f"Si tu as déjà eu honte de ton retard sur {focus}, ce post est pour toi.",
+            "chiffre": f"Des milliers de personnes abandonnent chaque année sur {focus} à cause d'une seule croyance limitante.",
         }
         return Content(
             pillar=pillar, title=title, hook=hooks.get(hook_key, hooks["question_pain"]),
@@ -412,7 +478,7 @@ class ContentGenerator:
             image_prompt="Scène éditoriale premium bleu marine et or, lumière naturelle, aucun texte, aucune marque.",
             points=points,
             truth="Dieu ne mesure pas seulement ce que tu possèdes, mais ce que ta fidélité produit dans ta vie et autour de toi.",
-            cta=f"Quel point veux-tu appliquer cette semaine ? Écris-le en commentaire. ({index})",
+            cta=f"Quelle clé veux-tu mettre en pratique cette semaine ? Dis-le-moi en commentaire. ({index})",
             hashtags=_build_hashtags(pillar, topic, random.Random(topic)),
             hook_type=hook_key,
         )
