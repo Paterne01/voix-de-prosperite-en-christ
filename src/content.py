@@ -135,13 +135,17 @@ class Content:
 
     @property
     def comment_text(self) -> str:
+        # Le commentaire démarre en reprenant l'accroche de l'image : le lecteur
+        # du réseau retrouve immédiatement le texte qu'il a sous les yeux, puis
+        # reçoit le développement. Cohérence image ↔ commentaire garantie.
         points = "\n\n".join(
             f"{index}. {point['heading']}\n{point['body']}\n{point['application']}"
             for index, point in enumerate(self.points, 1)
         )
         label = self._pick(TRUTH_LABELS, self.title)
+        intro = self.hook.rstrip(" ?!") if self.hook else self.title
         return (
-            f"{self.title}\n\n{points}\n\n{label}\n{self.truth}\n\n"
+            f"{self.title}\n\n« {intro} »\n\n{points}\n\n{label}\n{self.truth}\n\n"
             f"📖 {self.verse_reference}\n\n{self.cta}\n\n{' '.join(self.hashtags)}"
         )
 
