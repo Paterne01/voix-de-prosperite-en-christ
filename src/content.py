@@ -696,10 +696,13 @@ class ContentGenerator:
         # UN SEUL nombre pilote à la fois le titre et le nombre de points : jamais
         # deux sources indépendantes (le contrôle _validate le vérifie aussi).
         count = min(3 + index % 5, len(bank))  # 3..7 points, dans la limite éditoriale
-        offset = index % max(1, len(bank) - count + 1)
+        # ÉCHANTILLONNAGE déterministe (au lieu d'un segment contigu bank[a:b]) :
+        # deux posts voisins (même jour 8h/16h, ou même semaine) partageaient
+        # presque tous les points → commentaires quasi identiques. sample(index)
+        # choisit des points épars, différents à chaque index, sans répétition.
         points = [
             {"heading": heading, "body": body, "application": application}
-            for heading, body, application in bank[offset:offset + count]
+            for heading, body, application in random.Random(index).sample(bank, count)
         ]
         # Titre VARIÉ : plusieurs formulations plutôt que « N clés pour » fixe,
         # pour que deux posts voisins (même jour, même pilier) ne se ressemblent pas.

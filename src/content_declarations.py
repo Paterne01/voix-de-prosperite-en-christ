@@ -97,6 +97,85 @@ VERSES = [
     "Psaume 112:1", "Matthieu 6:33", "Proverbes 18:16", "Job 5:17",
 ]
 
+# Plans de déclaration PAR PILIER, en PLURIEL : une seule phrase figée par pilier
+# rendait chaque déclaration du même pilier identique (le manifeste seul ne suffisait
+# pas). Chaque plan est une parole déjà en marche, choisie selon le post pour que
+# deux déclarations du même jour / de la même semaine ne se ressemblent jamais.
+LOCAL_PLANS = {
+    "Dignité": [
+        "Tu es relevé et choisi ; ta valeur ne dépend pas de tes dettes.",
+        "Dieu ne mesure pas ta valeur à ton compte ; tu es cher, appelé et relevé.",
+        "La honte a fini de parler ; la voix de Dieu dit plus fort que tu es précieux.",
+        "Tu n'es pas une charge ni un oublié : tu es un fils, une fille relevée.",
+        "Ce que le monde a écrasé, Dieu le remonte : ta place est debout.",
+        "Tu portes une noblesse que rien ne peut t'enlever, pas même ton passé.",
+    ],
+    "Sagesse": [
+        "Des cieux s'ouvrent sur tes décisions ; tu choisis avec discernement.",
+        "Avant de signer, de parler ou de dépenser, tu consultes et tu discernez.",
+        "Dieu te donne un cœur clair : tu ne te laisses plus presser par la précipitation.",
+        "Tu reçois la sagesse qui te garde : tu poses les bonnes questions au bon moment.",
+        "Tes décisions cessent d'être des paris : la lumière éclaire tes choix.",
+        "Quand tous se précipitent, tu écoutes d'abord, puis tu avances sans regret.",
+    ],
+    "Libération": [
+        "Ce qui te retenait se brise ; tu marches libre et léger.",
+        "La peur qui t'empêchait de bouger perd son autorité sur toi aujourd'hui.",
+        "Les chaînes qui semblaient solides cèdent ; tu respires enfin à pleine poitrine.",
+        "Tu ne portes plus le fardeau d'hier : ce qui t'enchaînait est tranché.",
+        "Ton pas redevient léger : les blocages intérieurs tombent un à un.",
+        "Tu sors du cercle où tu tournais : une porte s'ouvre, tu la franchis.",
+    ],
+    "Productivité": [
+        "Tu produis ; chaque main qui plante récolte cent fois.",
+        "Ce que tu commences s'achève : ta journée ne t'échappe plus.",
+        "Tu travailles avec ordre : ton énergie porte des fruits visibles.",
+        "Dieu met dans tes mains des capacités qui tournent en résultats.",
+        "Tu avances chaque jour d'un pas réel ; l'œuvre se construit sous tes yeux.",
+        "Ton travail n'est plus vain : tu récoltes ce que ta fidélité a semé.",
+    ],
+    "Restauration relationnelle": [
+        "Les relations brisées se réparent ; la paix revient autour de toi.",
+        "Le pardon prend racine dans ton cœur ; les murs tombent entre les tiens.",
+        "Dieu recoud ce qui était déchiré : ta maison redevient un lieu de paix.",
+        "Tu retrouves la force de tendre la main ; les cœurs se rapprochent de toi.",
+        "Les silences froids se brisent ; la parole juste revient dans ta famille.",
+        "Ce qui s'était éloigné revient : l'amour reconstruit ce que la colère avait cassé.",
+    ],
+    "Provision Active": [
+        "La provision arrive ; les portes s'ouvrent et tu sais y entrer.",
+        "Ce qui manquait se met en mouvement : tu frappes, la porte répond.",
+        "Dieu prépare une source là où tu croyais que c'était fermé.",
+        "Tes efforts trouvent une porte : la provision suit ton obéissance.",
+        "Ce qui était retenu se libère : tu entres dans une saison d'abondance ordonnée.",
+        "Tu ne mendies plus l'occasion : elle se présente et tu sais la saisir.",
+    ],
+    "Générosité": [
+        "Tu deviens une source ; ce que tu reçois, tu le bénis et le partages.",
+        "Ta main s'ouvre sans peur : ce que tu donnes revient multiplié.",
+        "Dieu fait de toi un canal de bénédiction pour ceux qui t'entourent.",
+        "Tu rends grâce, tu partages, et l'abondance t'accompagne.",
+        "Ta générosité ne t'appauvrit pas : elle ouvre les réservoirs du ciel.",
+        "Tu bénis sans compter, car tu sais d'où vient ce que tu as.",
+    ],
+}
+
+# Closures HUMaines et variées : remplaçaient la phrase figée « Je déclare la faveur
+# de Dieu sur {dimension}. Amen. » qui rendait chaque déclaration semblable. Chaque
+# closure est une parole courte, concrète, qui clôt sur la vie du lecteur.
+LOCAL_CLOSURES = [
+    "Et ta vie entière entre dans cette faveur : esprit, cœur, famille, finances.",
+    "Cette parole pose sa main sur ta semaine entière ; reçois-la.",
+    "Amen sur ta maison, tes projets et tout ce que ta main touche.",
+    "Dieu scelle ce qu'il annonce ; tu peux faire confiance au mouvement.",
+    "Et cela commence aujourd'hui, pas demain : le changement est déjà là.",
+    "Prends ce mot comme un signe : ta saison vient de tourner.",
+    "Que cette vérité t'accompagne au réveil, au travail et au repos.",
+    "La faveur te précède ; elle prépare le terrain devant tes pas.",
+    "Ne doute pas de ce qui se déclare : le ciel a déjà répondu.",
+    "Et tu le verras de tes yeux, au fil des jours qui viennent.",
+]
+
 
 @dataclass
 class Declaration:
@@ -312,30 +391,30 @@ class DeclarationGenerator:
 
     def _build_local(self, index: int, pillar: str | None = None) -> Declaration:
         pillar = pillar or PILLARS[index % len(PILLARS)]
-        plan = {
-            "Dignité": "Tu es relevé et choisi ; ta valeur ne dépend pas de tes dettes.",
-            "Sagesse": "Des cieux s'ouvrent sur tes décisions ; tu choisis avec discernement.",
-            "Libération": "Ce qui te retenait se brise ; tu marches libre et léger.",
-            "Productivité": "Tu produis ; chaque main qui plante récolte cent fois.",
-            "Restauration relationnelle": "Les relations brisées se réparent ; la paix revient autour de toi.",
-            "Provision Active": "La provision arrive ; les portes s'ouvrent et tu sais y entrer.",
-            "Générosité": "Tu deviens une source ; ce que tu reçois, tu le bénis et le partages.",
-        }[pillar]
-        # OUVERTURE VARIÉE : ne pas toujours commencer par « plan + manifeste ».
-        # On alterne une question d'accroche occasionnelle pour toucher la
-        # douleur AVANT la déclaration (cf. SYSTEM_PROMPT_DECLARATION).
+        plans = LOCAL_PLANS.get(pillar, LOCAL_PLANS["Dignité"])
+        mix = (index * 37 + 11) % (1 << 30)
+        plan = plans[mix % len(plans)]
+        manifeste = LOCAL_MANIFEST[(mix >> 3) % len(LOCAL_MANIFEST)]
+        # OUVERTURE VARIÉE : une phrase de vie qui TOUCHE la douleur du lecteur
+        # avant la déclaration, pour que deux posts ne commencent jamais pareil.
         openers = [
             "",  # affirmation directe classique
-            "",  # affirmation directe classique
+            "",
             "Tu te demandes si cela va un jour changer ? ",
             "Fatigué de promesses sans effet ? ",
             "Si tu as déjà douté en secret, écoute ceci : ",
+            "Au milieu de tes questions, voici une parole ferme : ",
+            "Tu n'es pas le seul à espérer ; écoute ce que Dieu dit : ",
             "",
         ]
-        opener = openers[index % len(openers)]
-        line = f"{opener}{plan} {LOCAL_MANIFEST[index % len(LOCAL_MANIFEST)]}"
-        dim = CLOSURE_DIMENSIONS[index % len(CLOSURE_DIMENSIONS)]
-        closure = f"Je déclare la faveur de Dieu sur {dim}. Amen."
+        opener = openers[mix % len(openers)]
+        # Structure NON figée : on alterne « plan → manifeste » et
+        # « manifeste → plan » pour que la phrase ne soit jamais le même moule.
+        if (mix >> 4) % 2:
+            line = f"{opener}{plan} {manifeste}"
+        else:
+            line = f"{opener}{manifeste} {plan}"
+        closure = LOCAL_CLOSURES[mix % len(LOCAL_CLOSURES)]
         cta = LOCAL_CTAS[index % len(LOCAL_CTAS)]
         return Declaration(
             pillar=pillar,
@@ -370,3 +449,5 @@ class DeclarationGenerator:
                 continue
             if _clean(str(getattr(content, field))).casefold() in set(exclusions[field]):
                 raise ValueError(f"Doublon sur 90 jours : {field}")
+        if exclusions.get("title") and _too_close(content.declaration, set(exclusions["title"])):
+            raise ValueError("Déclaration trop proche d'un post publié récemment")
