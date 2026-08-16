@@ -687,7 +687,12 @@ class ContentGenerator:
             "clés", "pratiques", "principes", "étapes", "secrets", "manières",
         ])
         angles = LOCAL_ANGLES.get(pillar, LOCAL_ANGLES["Dignité"])
-        angle = angles[(index // len(PILLARS)) % len(angles)]
+        # Mélange multiplicatif : chaque index donne une combinaison (focus, angle)
+        # différente et bien répartie sur tout l'espace, pour que la recherche d'un
+        # titre inédit ne tourne pas en rond sur des combos corrélés.
+        mix = (index * 31 + 7) % (1 << 30)
+        focus = focuses[mix % len(focuses)]
+        angle = angles[(mix >> 3) % len(angles)]
         title = f"{count} {count_label} pour {focus}, {angle}"
         hook_key, hook_label = hook_type or ("question_pain", "Une question qui fait mal")
         hooks = {
