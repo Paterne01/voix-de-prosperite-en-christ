@@ -85,6 +85,47 @@ CAPTION_CLOSERS = [
     "",
 ]
 
+# Situations concrètes ajoutées au TITRE local : elles ancrent le post dans une
+# réalité vécue (dettes, jugement des proches, prière sans réponse…) et
+# multiplient les combinaisons de titres uniques (focus × angle × nombre).
+LOCAL_ANGLES = {
+    "Dignité": [
+        "quand la honte te tient à l'écart", "face au jugement des proches",
+        "quand tes finances ne décollent pas", "malgré ce que tu n'as pas accompli",
+        "quand tu te sens invisible", "après une chute qui t'a fait douter",
+    ],
+    "Sagesse": [
+        "avant de signer un contrat", "quand tout le monde te presse de décider",
+        "face à une offre trop belle", "avant de dépenser",
+        "quand tu dois trancher seul", "après une erreur que tu veux éviter de répéter",
+    ],
+    "Libération": [
+        "quand la peur te paralyse", "après des années de blocage",
+        "quand la même pensée revient sans cesse", "face à l'échec qui t'a marqué",
+        "quand tu portes encore le passé", "au moment de recommencer à zéro",
+    ],
+    "Productivité": [
+        "quand ta journée t'échappe", "face à la tâche que tu remets",
+        "quand rien ne semble avancer", "au milieu de trop d'occupations",
+        "quand tu veux vraiment produire", "avant de perdre encore une semaine",
+    ],
+    "Restauration relationnelle": [
+        "quand la maison est en silence", "après une dispute qui a tout cassé",
+        "face à un proche qui s'éloigne", "quand le pardon semble impossible",
+        "au milieu d'une famille divisée", "quand tu as honte de renouer",
+    ],
+    "Provision Active": [
+        "quand les portes semblent fermées", "face à une opportunité qui passe",
+        "quand tu as tout essayé", "au moment où le besoin se fait sentir",
+        "quand la faveur tarde", "avant de renoncer à une porte ouverte",
+    ],
+    "Générosité": [
+        "quand tu as peu mais veux donner", "face à quelqu'un dans le besoin",
+        "quand tout le monde te demande", "au moment d'ouvrir ta main",
+        "quand tu veux aider sans t'appauvrir", "avant de garder pour toi seul",
+    ],
+}
+
 # Vérités PAR PILIER pour le générateur local : une vérité figée unique pour
 # tous les piliers rendait chaque commentaire identique. Désormais chaque pilier
 # dispose de plusieurs vérités, choisies selon le titre pour varier à chaque post.
@@ -452,6 +493,40 @@ def _clean(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+def _tokenize(value: str) -> set[str]:
+    """Ensemble de mots-clés significatifs d'un texte (minuscules, sans mots vides)."""
+    stopwords = {
+        "pour", "de", "du", "des", "le", "la", "les", "un", "une", "et", "en", "au", "aux",
+        "sur", "que", "qui", "dans", "ce", "ces", "avec", "sans", "pas", "tu", "ta", "ton",
+        "tes", "toi", "ton", "tes", "c'est", "ceci", "n'est", "ne", "se", "sa", "son", "tes",
+    }
+    words = re.findall(r"\b[a-z0-9]{3,}\b", value.casefold())
+    return {w for w in words if w not in stopwords}
+
+
+def _jaccard(a: set[str], b: set[str]) -> float:
+    """Similarité de Jaccard entre deux ensembles de mots (0..1)."""
+    if not a and not b:
+        return 1.0
+    union = a | b
+    if not union:
+        return 0.0
+    return len(a & b) / len(union)
+
+
+def _too_close(title: str, recent_titles: set[str], threshold: float = 0.55) -> bool:
+    """Vrai si le titre est trop proche d'un titre publié récemment (même jour
+    ou jours passés) — évite que deux posts quasi identiques se suivent."""
+    new_tokens = _tokenize(title)
+    if not new_tokens:
+        return False
+    for recent in recent_titles:
+        recent_tokens = _tokenize(recent)
+        if _jaccard(new_tokens, recent_tokens) >= threshold:
+            return True
+    return False
+
+
 def _build_hashtags(pillar: str, topic: str, rng: random.Random) -> list[str]:
     """Hashtags dynamiques : base de marque + tags du pilier, EXACTEMENT 5."""
     pool = list(PILLAR_TAGS.get(pillar, list(PILLAR_TAGS.values())[0]))
@@ -611,7 +686,9 @@ class ContentGenerator:
         count_label = random.Random(index).choice([
             "clés", "pratiques", "principes", "étapes", "secrets", "manières",
         ])
-        title = f"{count} {count_label} pour {focus}"
+        angles = LOCAL_ANGLES.get(pillar, LOCAL_ANGLES["Dignité"])
+        angle = angles[(index // len(PILLARS)) % len(angles)]
+        title = f"{count} {count_label} pour {focus}, {angle}"
         hook_key, hook_label = hook_type or ("question_pain", "Une question qui fait mal")
         hooks = {
             "question_pain": f"Tu travailles dur pour {focus}, et pourtant tu as encore l'impression de ne pas avancer ?",
@@ -684,3 +761,5 @@ class ContentGenerator:
         for field in exclusions:
             if _clean(str(getattr(content, field))).casefold() in set(exclusions[field]):
                 raise ValueError(f"Doublon sur 90 jours : {field}")
+        if exclusions.get("title") and _too_close(content.title, set(exclusions["title"])):
+            raise ValueError("Titre trop proche d'un post publié récemment")
