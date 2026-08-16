@@ -6,7 +6,7 @@ import re
 from dataclasses import asdict, dataclass, fields
 from datetime import UTC, datetime
 
-from .content import normalize_hashtags
+from .content import _too_close, normalize_hashtags
 from .hf_text import generate_json as hf_generate_json
 from .llm import ordered_providers
 from .secrets import get_secret
