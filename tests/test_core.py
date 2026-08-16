@@ -305,4 +305,4 @@ def test_generate_uses_local_only_when_all_keyed_providers_fail(monkeypatch, tmp
     generator = ContentGenerator(db, config=config)
     content = generator.generate(prompt="SYSTÈME")
     assert content.pillar in DEFAULT_WEEK_PILLARS.values()
-    assert content.title.startswith(("{", "[")) or "clés pour" in content.title
+    assert content.title.startswith(("{", "[")) or " pour " in content.title

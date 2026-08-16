@@ -127,42 +127,57 @@ LOCAL_TRUTHS = {
 }
 
 # CTA variés pour le générateur local : remplace le CTA figé « Quelle clé… (N) »
-# qui apparaissait à l'identique sur chaque post de secours.
+# qui apparaissait à l'identique sur chaque post de secours. Chaque gabarit
+# contient `{focus}` pour garantir des CTA uniques selon le focus du post.
 LOCAL_CTAS = {
     "Dignité": [
-        "Quelle parole veux-tu croire sur toi cette semaine ? Dis-le en commentaire.",
-        "Écris ce soir une vérité que tu veux retenir sur ta valeur.",
-        "Prends une minute pour te relire à voix haute : tu es important.",
+        "Quelle parole veux-tu croire sur toi pour {focus} ? Dis-le en commentaire.",
+        "Écris ce soir une vérité que tu veux retenir sur {focus}.",
+        "Prends une minute pour te relire à voix haute : {focus} compte pour Dieu.",
+        "Qu'est-ce qui doit changer dans ta façon de voir {focus} cette semaine ?",
+        "Tage quelqu'un qui a besoin d'entendre ceci sur {focus}.",
     ],
     "Sagesse": [
-        "Quelle décision veux-tu confier à Dieu avant d'agir ? Réponds en commentaire.",
-        "Note la question que tu dois poser avant de trancher.",
-        "Prends le temps de demander conseil à un sage cette semaine.",
+        "Quelle décision veux-tu confier à Dieu avant d'agir sur {focus} ? Réponds en commentaire.",
+        "Note la question que tu dois poser avant de trancher sur {focus}.",
+        "Prends le temps de demander conseil avant d'avancer sur {focus}.",
+        "Quelle fausse solution dois-tu refuser pour {focus} cette semaine ?",
+        "Partage la leçon que {focus} t'a déjà appris.",
     ],
     "Libération": [
-        "Qu'est-ce que tu décides de laisser partir aujourd'hui ?",
-        "Partage en commentaire une chaîne dont tu veux être libéré.",
-        "Fais aujourd'hui la chose que tu remets par peur.",
+        "Qu'est-ce que tu décides de laisser partir aujourd'hui pour avancer sur {focus} ?",
+        "Partage en commentaire une chaîne dont tu veux être libéré sur {focus}.",
+        "Fais aujourd'hui la chose que tu remets par peur sur {focus}.",
+        "Quelle pensée te retient encore sur {focus} ? Nomme-la et brise-la.",
+        "Qui veux-tu remercier pour t'avoir aidé à progresser sur {focus} ?",
     ],
     "Productivité": [
-        "Quelle tâche termines-tu aujourd'hui ? Engage-toi en commentaire.",
-        "Choisis UNE petite action et fais-la dès maintenant.",
-        "Note la promesse que tu veux tenir cette semaine.",
+        "Quelle tâche termines-tu aujourd'hui pour {focus} ? Engage-toi en commentaire.",
+        "Choisis UNE petite action et fais-la dès maintenant pour {focus}.",
+        "Note la promesse que tu veux tenir pour {focus} cette semaine.",
+        "Quelle habitude veux-tu instaurer pour {focus} ?",
+        "Dis-moi le progrès que tu veux voir sur {focus} d'ici dimanche.",
     ],
     "Restauration relationnelle": [
-        "Quelle relation veux-tu réparer cette semaine ?",
-        "Envoie le message de réconciliation que tu remets.",
-        "Qui veux-tu appeler juste pour prendre de ses nouvelles ?",
+        "Quelle relation veux-tu réparer pour {focus} cette semaine ?",
+        "Envoie le message de réconciliation que tu remets sur {focus}.",
+        "Qui veux-tu appeler juste pour prendre de ses nouvelles, autour de {focus} ?",
+        "Quelle parole douce peux-tu dire aujourd'hui pour {focus} ?",
+        "Qui veux-tu bénir malgré la dispute, sur {focus} ?",
     ],
     "Provision Active": [
-        "Quelle porte veux-tu frapper cette semaine ?",
-        "Quel pas concret fais-tu aujourd'hui vers ta provision ?",
-        "Dis-moi en commentaire l'action que tu engages dès maintenant.",
+        "Quelle porte veux-tu frapper cette semaine pour {focus} ?",
+        "Quel pas concret fais-tu aujourd'hui vers {focus} ?",
+        "Dis-moi en commentaire l'action que tu engages pour {focus} dès maintenant.",
+        "Quelle ressource négligée peux-tu faire grandir pour {focus} ?",
+        "Quelle opportunité dois-tu saisir pour {focus} avant la fin du mois ?",
     ],
     "Générosité": [
-        "Qui peux-tu bénir cette semaine sans attendre de retour ?",
-        "Fais un geste de bonté que personne ne verra.",
-        "Quelle personne autour de toi as-tu déjà envie d'élever ?",
+        "Qui peux-tu bénir cette semaine, autour de {focus} ?",
+        "Fais un geste de bonté que personne ne verra, pour {focus}.",
+        "Quelle personne autour de toi peux-tu élever sur {focus} ?",
+        "Quel conseil peux-tu partager gratuitement pour aider quelqu'un sur {focus} ?",
+        "Quelle porte peux-tu ouvrir pour quelqu'un, en lien avec {focus} ?",
     ],
 }
 
@@ -222,6 +237,11 @@ LOCAL_BANK = {
         ("Termine ce que tu commences", "Un projet fini vaut mieux que dix projets commencés.", "Chez toi, clos un petit dossier resté en suspens cette semaine."),
         ("Produis avant de consommer", "Dieu te rend capable de créer, pas seulement d'acheter.", "Chez toi, fais quelque chose de tes mains qui peut servir quelqu'un."),
         ("Respecte tes heures", "La discipline des horaires change la face de ton business.", "Chez toi, bloque un créneau de travail profond pour demain."),
+        ("Organise avant d'exécuter", "Le désordre mange ton temps ; un plan simple le libère.", "Chez toi, écris demain matin tes trois priorités sur un papier."),
+        ("Apprends chaque jour", "Compétence d'aujourd'hui, revenus de demain.", "Chez toi, consacre trente minutes à apprendre quelque chose d'utile."),
+        ("Sors de la consommation passive", "Ce que tu consommes chaque jour façonne ce que tu produis.", "Chez toi, échange un divertissement contre une formation cette semaine."),
+        ("Fais moins, mais fais-le bien", "La qualité attire des résultats que la quantité ne donne pas.", "Chez toi, choisis un domaine et vise l'excellence au lieu de l'à-peu-près."),
+        ("Mesure tes progrès", "Ce qu'on ne mesure pas ne progresse pas.", "Chez toi, note ce soir ce que tu as réellement accompli aujourd'hui."),
     ],
     "Restauration relationnelle": [
         ("Investis dans les relations", "Ton réseau n'est pas un carnet d'adresses : c'est un terrain de service.", "Chez toi, appelle quelqu'un pour prendre de ses nouvelles."),
@@ -231,6 +251,11 @@ LOCAL_BANK = {
         ("Choisis bien ton entourage", "Tes fréquentations orientent tes décisions.", "Chez toi, rapproche-toi de quelqu'un qui t'élève, et protège ta paix."),
         ("Garde la paix de ta maison", "La prospérité sans paix familiale est une prison dorée.", "Chez toi, crée un moment de qualité avec tes proches cette semaine."),
         ("Sois quelqu'un à qui on peut se confier", "La confiance attire les opportunités et les bénédictions.", "Chez toi, garde le secret qu'on t'a confié et reviens vers la personne."),
+        ("Parle avec des mots qui réparent", "La parole peut casser en un instant ce qui s'est bâti en des années.", "Chez toi, choisis des mots doux avant la prochaine discussion difficile."),
+        ("Ne rumine pas les offenses", "Ruminer le passé te fait payer deux fois.", "Chez toi, décide ce soir de lâcher une offense que tu ressasses."),
+        ("Rapproche-toi de ta famille", "La bénédiction commence dans la maison avant de s'étendre dehors.", "Chez toi, appelle un parent que tu négliges depuis longtemps."),
+        ("Réconcilie avant de négocier", "Les affaires avancent quand les relations sont réparées.", "Chez toi, règle un différend avant de conclure un accord."),
+        ("Pardonne sans attendre de excuses", "Pardonner n'est pas attendre qu'on le mérite : c'est te libérer.", "Chez toi, pardonne aujourd'hui, même si l'autre ne s'excuse pas."),
     ],
     "Provision Active": [
         ("Réponds par l'action à la provision", "Dieu ouvre les portes ; tes pas les traversent.", "Chez toi, fais aujourd'hui le pas concret que la porte exige."),
@@ -240,6 +265,11 @@ LOCAL_BANK = {
         ("Mets de l'ordre dans tes finances", "La faveur de Dieu aime les cœurs et les comptes ordonnés.", "Chez toi, établis un premier budget simple ce week-end."),
         ("Reconnais les aides de Dieu", "La provision passe aussi par les personnes que Dieu t'envoie.", "Chez toi, remercie quelqu'un qui t'a ouvert une porte."),
         ("Sème des graines d'action", "La foi sans action est un chèque jamais déposé.", "Chez toi, effectue la petite action que tu repousses depuis des semaines."),
+        ("Ouvre l'œil aux portes ouvertes", "La provision passe souvent là où tu ne regardes pas.", "Chez toi, prête attention à une opportunité que tu ignorais."),
+        ("Frappe avec persévérance", "La porte s'ouvre parfois après plusieurs frappes.", "Chez toi, retente une démarche refusée, avec une approche améliorée."),
+        ("Associe compétence et prière", "La faveur divine et le savoir-faire avancent ensemble.", "Chez toi, améliore une compétence utile à ta prochaine porte."),
+        ("Sois visible pour ta provision", "Qui ne se montre pas ne se voit pas confier.", "Chez toi, fais connaître ton offre à une personne de plus."),
+        ("Ne méprise pas les petits commencements", "La grande provision commence souvent par une petite obéissance.", "Chez toi, fais bien la petite chose confiée aujourd'hui."),
     ],
     "Générosité": [
         ("Fais du bien autour de toi", "La prospérité biblique produit du fruit qui bénit aussi les autres.", "Chez toi, encourage ou aide concrètement une personne cette semaine."),
@@ -249,6 +279,11 @@ LOCAL_BANK = {
         ("Élève quelqu'un avec toi", "La vraie prospérité fait monter les autres avec elle.", "Chez toi, forme quelqu'un sur une compétence que tu maîtrises."),
         ("Sème d'abord chez les tiens", "La générosité commence dans ta maison.", "Chez toi, bénis un membre de ta famille de façon concrète."),
         ("Bénis sans calcul", "Le cœur généreux ne compte pas avant de donner.", "Chez toi, fais aujourd'hui un geste de bonté que personne ne verra."),
+        ("Donne une chance à quelqu'un", "Chaque main tendue peut changer une vie entière.", "Chez toi, recommande ou ouvre une porte à quelqu'un qui en a besoin."),
+        ("Sois généreux de tes conseils", "Le temps donné vaut parfois plus que l'argent.", "Chez toi, partage une leçon apprise avec quelqu'un qui débute."),
+        ("Préserve la dignité en donnant", "Le don discret honore ; le don humiliant blesse.", "Chez toi, aide quelqu'un d'une manière qui préserve sa fierté."),
+        ("Fais grandir la générosité chez tes enfants", "Ce que tu leur apprends à partager leur sera rendu centuple.", "Chez toi, implique tes proches dans un geste de partage cette semaine."),
+        ("Ne repousse pas le pauvre", "Prêter main-forte au faible, c'est prêter à Dieu lui-même.", "Chez toi, tends la main à quelqu'un que tout le monde évite."),
     ],
 }
 
@@ -571,7 +606,12 @@ class ContentGenerator:
             {"heading": heading, "body": body, "application": application}
             for heading, body, application in bank[offset:offset + count]
         ]
-        title = f"{count} clés pour {focus}"
+        # Titre VARIÉ : plusieurs formulations plutôt que « N clés pour » fixe,
+        # pour que deux posts voisins (même jour, même pilier) ne se ressemblent pas.
+        count_label = random.Random(index).choice([
+            "clés", "pratiques", "principes", "étapes", "secrets", "manières",
+        ])
+        title = f"{count} {count_label} pour {focus}"
         hook_key, hook_label = hook_type or ("question_pain", "Une question qui fait mal")
         hooks = {
             "question_pain": f"Tu travailles dur pour {focus}, et pourtant tu as encore l'impression de ne pas avancer ?",
@@ -580,14 +620,18 @@ class ContentGenerator:
             "identification": f"Si tu as déjà eu honte de ton retard sur {focus}, ce post est pour toi.",
             "chiffre": f"Des milliers de personnes abandonnent chaque année sur {focus} à cause d'une seule croyance limitante.",
         }
+        truths = LOCAL_TRUTHS.get(pillar, LOCAL_TRUTHS["Dignité"])
+        truth = truths[index % len(truths)]
+        ctas = LOCAL_CTAS.get(pillar, LOCAL_CTAS["Dignité"])
+        cta = ctas[(index // len(truths)) % len(ctas)].replace("{focus}", focus)
         return Content(
             pillar=pillar, title=title, hook=hooks.get(hook_key, hooks["question_pain"]),
             topic=topic, verse_reference=f"Proverbes {(index % 31) + 1}:{(index // 31) + 1}",
-            decor=["bureau élégant baigné de lumière dorée", "bibliothèque bleu marine et or", "montagnes majestueuses au lever du jour"][index % 3] + f", composition {index}",
+            decor=["bureau élégant baigné de lumière dorée", "bibliothèque bleu marine et or", "montagnes majestueuses au lever du jour", "salon chaleureux en fin de journée", "bord de mer paisible au crépuscule"][index % 5] + f", composition {index}",
             image_prompt="Scène éditoriale premium bleu marine et or, lumière naturelle, aucun texte, aucune marque.",
             points=points,
-            truth="Dieu ne mesure pas seulement ce que tu possèdes, mais ce que ta fidélité produit dans ta vie et autour de toi.",
-            cta=f"Quelle clé veux-tu mettre en pratique cette semaine ? Dis-le-moi en commentaire. ({index})",
+            truth=truth,
+            cta=cta,
             hashtags=_build_hashtags(pillar, topic, random.Random(topic)),
             hook_type=hook_key,
         )
