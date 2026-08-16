@@ -85,6 +85,87 @@ CAPTION_CLOSERS = [
     "",
 ]
 
+# Vérités PAR PILIER pour le générateur local : une vérité figée unique pour
+# tous les piliers rendait chaque commentaire identique. Désormais chaque pilier
+# dispose de plusieurs vérités, choisies selon le titre pour varier à chaque post.
+LOCAL_TRUTHS = {
+    "Dignité": [
+        "Dieu ne mesure pas ce que tu possèdes, mais qui tu es en lui : cher, appelé et relevé.",
+        "Ta valeur ne dépend ni de ton compte, ni de l'avis des autres : elle vient de Dieu.",
+        "La dignité n'est pas un statut que tu attends, c'est une identité que tu reçois.",
+    ],
+    "Sagesse": [
+        "Une bonne décision vaut mieux que dix bons plans sans discernement.",
+        "La vraie sagesse ne consiste pas à tout savoir, mais à demander avant d'agir.",
+        "Dieu ne te demande pas de tout maîtriser, seulement de le consulter d'abord.",
+    ],
+    "Libération": [
+        "La peur n'a d'autorité sur toi que celle que tu lui donnes.",
+        "Ce qui te retenait n'est pas plus fort que la parole qui t'affranchit.",
+        "Ta liberté commence le jour où tu arrêtes de croire le mensonge qui t'enchaîne.",
+    ],
+    "Productivité": [
+        "Dieu ne bénit pas seulement ce que tu pries, il bénit ce que tu fais.",
+        "La fidélité dans les petites choses prépare les grandes confiances.",
+        "Un pas fait aujourd'hui vaut mieux qu'un grand projet remis pour toujours.",
+    ],
+    "Restauration relationnelle": [
+        "La prospérité sans paix autour de toi est une maison riche mais vide.",
+        "Pardonner, ce n'est pas effacer la faute, c'est reprendre ta liberté.",
+        "Dieu répare les relations, mais il te demande de faire le premier pas.",
+    ],
+    "Provision Active": [
+        "Les portes s'ouvrent pour ceux qui sont déjà en train de marcher.",
+        "La provision de Dieu demande souvent une main qui se lève et qui frappe.",
+        "Ce n'est pas la porte qui manque, c'est parfois le courage de frapper.",
+    ],
+    "Générosité": [
+        "Ce qui circule se multiplie ; ce qui reste enfermé se dessèche.",
+        "La vraie prospérité se mesure à ce que tu rends possible autour de toi.",
+        "On ne perd jamais en donnant : on sème ce qui reviendra.",
+    ],
+}
+
+# CTA variés pour le générateur local : remplace le CTA figé « Quelle clé… (N) »
+# qui apparaissait à l'identique sur chaque post de secours.
+LOCAL_CTAS = {
+    "Dignité": [
+        "Quelle parole veux-tu croire sur toi cette semaine ? Dis-le en commentaire.",
+        "Écris ce soir une vérité que tu veux retenir sur ta valeur.",
+        "Prends une minute pour te relire à voix haute : tu es important.",
+    ],
+    "Sagesse": [
+        "Quelle décision veux-tu confier à Dieu avant d'agir ? Réponds en commentaire.",
+        "Note la question que tu dois poser avant de trancher.",
+        "Prends le temps de demander conseil à un sage cette semaine.",
+    ],
+    "Libération": [
+        "Qu'est-ce que tu décides de laisser partir aujourd'hui ?",
+        "Partage en commentaire une chaîne dont tu veux être libéré.",
+        "Fais aujourd'hui la chose que tu remets par peur.",
+    ],
+    "Productivité": [
+        "Quelle tâche termines-tu aujourd'hui ? Engage-toi en commentaire.",
+        "Choisis UNE petite action et fais-la dès maintenant.",
+        "Note la promesse que tu veux tenir cette semaine.",
+    ],
+    "Restauration relationnelle": [
+        "Quelle relation veux-tu réparer cette semaine ?",
+        "Envoie le message de réconciliation que tu remets.",
+        "Qui veux-tu appeler juste pour prendre de ses nouvelles ?",
+    ],
+    "Provision Active": [
+        "Quelle porte veux-tu frapper cette semaine ?",
+        "Quel pas concret fais-tu aujourd'hui vers ta provision ?",
+        "Dis-moi en commentaire l'action que tu engages dès maintenant.",
+    ],
+    "Générosité": [
+        "Qui peux-tu bénir cette semaine sans attendre de retour ?",
+        "Fais un geste de bonté que personne ne verra.",
+        "Quelle personne autour de toi as-tu déjà envie d'élever ?",
+    ],
+}
+
 # Points pour le générateur local : banque PAR PILIER, pour que le commentaire
 # reste toujours lié au point du jour ET au texte affiché sur l'image (titre +
 # accroche). Le nombre de points retenus doit TOUJOURS égaler le nombre annoncé
@@ -99,6 +180,11 @@ LOCAL_BANK = {
         ("Porte la tête haute", "La honte ne rend personne plus fort ; l'orgueil sain si.", "Chez toi, viens aujourd'hui avec une posture digne, même si tes finances tardent."),
         ("Agis en enfant de Dieu", "Ton identité précède ta situation : tu n'es pas défini par ton compte en banque.", "Chez toi, accomplit une tâche avec l'assurance d'un enfant aimé de Dieu."),
         ("Sors de la mentalité d'indigent", "Dieu avait un plan pour toi bien avant ta naissance.", "Chez toi, médite Ésaïe 61:1-2 et demande ce que Dieu pense de toi."),
+        ("Ne te défini pas par ce que tu n'as pas", "Ce qui te manque ne dit rien de ce que tu es en Christ.", "Chez toi, liste ce que tu as reçu de Dieu et pas seulement ce qui te manque."),
+        ("Respecte ta valeur devant les autres", "Ta manière de te présenter enseigne aux autres comment te traiter.", "Chez toi, arrête de te minimiser quand on te demande qui tu es."),
+        ("Marche sans mendier", "Tu n'es pas né pour tendre la main, mais pour bâtir et pour servir.", "Chez toi, refuse aujourd'hui la posture de l'inférieur et exerce ton autorité."),
+        ("Sois fier de ton origine", "Dieu écrit ton histoire : tu n'as pas à en avoir honte.", "Chez toi, remercie Dieu pour le chemin parcouru, même modeste."),
+        ("Occupe ta place", "Chaque enfant de Dieu a une place qui n'attend que lui.", "Chez toi, occupe une responsabilité que tu fuyais par manque d'estime."),
     ],
     "Sagesse": [
         ("Cherche la sagesse avant la précipitation", "Une décision paisible vaut mieux qu'une solution rapide sans discernement.", "Chez toi, prends un temps de prière et note tes options."),
@@ -108,6 +194,11 @@ LOCAL_BANK = {
         ("Compte avant de souscrire", "S'endetter pour « faire comme les autres » est un piège classique.", "Chez toi, fais le calcul complet avant d'accepter un crédit."),
         ("Gère ce que tu as, même peu", "La gestion honnête de la petite somme prépare la grande.", "Chez toi, fais un état des lieux de tes finances de la semaine."),
         ("Investis dans ce qui compte", "Tout investissement ne produit pas du fruit ; choisis avec discernement.", "Chez toi, note ce qui rapporte vraiment et coupe ce qui te draine."),
+        ("Questionne avant d'accepter", "Une question simple évite des années de regret.", "Chez toi, pose la question que tu évites avant de signer."),
+        ("N'apprends pas seul", "La sagesse des autres te fait gagner du temps.", "Chez toi, lis un livre ou écoute quelqu'un qui a réussi là où tu veux aller."),
+        ("Fais silence avant de répondre", "La réponse précipitée envenime ; la parole réfléchie apaise.", "Chez toi, avant ta prochaine décision, accorde-toi une nuit de réflexion."),
+        ("Choisis tes batailles", "Tout combat n'est pas pour toi ; ne dépense pas ton énergie partout.", "Chez toi, note ce qui mérite vraiment ton temps cette semaine."),
+        ("Crains Dieu au lieu de craindre l'échec", "La crainte de Dieu vaut mieux que mille plans humains.", "Chez toi, demande à Dieu la priorité avant d'organiser ta journée."),
     ],
     "Libération": [
         ("Garde la paix dans les épreuves", "Dieu travaille dans le calme, pas dans la panique.", "Chez toi, remplace la plainte par une prière de gratitude."),
@@ -117,6 +208,11 @@ LOCAL_BANK = {
         ("Pardonne pour avancer libre", "L'amertume est une chaîne que tu portes contre toi-même.", "Chez toi, libère une personne par le pardon, en prière."),
         ("Reprends la maîtrise de ta journée", "Le chaos mental se dissout dans les bonnes habitudes.", "Chez toi, fixe ton lever et une priorité unique pour demain."),
         ("Sors du fatalisme", "Ton histoire ne détermine pas ton avenir.", "Chez toi, écris une décision que tu remettais par résignation."),
+        ("Tranche avec les mauvaises habitudes", "Une habitude est un chemin ; choisis lequel tu empruntes chaque jour.", "Chez toi, identifie l'habitude qui te vole et remplace-la dès ce soir."),
+        ("Refuse la mentalité de victime", "Les circonstances existent, mais elles ne gouvernent plus ta vie.", "Chez toi, arrête de raconter ton problème et commence à décrire ta solution."),
+        ("Délivre-toi du besoin d'approbation", "Tu n'as pas besoin que tout le monde valide pour avancer.", "Chez toi, fais une bonne action sans en parler à personne."),
+        ("Ne vis plus dans le passé", "Dieu fait une chose nouvelle ; arrête de regarder en arrière.", "Chez toi, écris ce que tu laisses derrière toi aujourd'hui."),
+        ("Brise le cycle du blocage", "Le même problème répété a une même cause : il est temps de la nommer.", "Chez toi, nomme un blocage récurrent et demande à Dieu la sortie."),
     ],
     "Productivité": [
         ("Commence avec ce qui t'est confié", "La fidélité se construit dans les petites responsabilités.", "Chez toi, choisis une action utile à terminer aujourd'hui."),
@@ -160,13 +256,13 @@ LOCAL_BANK = {
 # d'amorce au commentaire pour qu'il suive l'image). Plusieurs focus par pilier
 # pour garantir des titres humains UNIQUES sans « repère N » technique.
 LOCAL_FOCUSES = {
-    "Dignité": ["ta dignité en Christ", "ta valeur retrouvée", "ta place dans le dessein de Dieu", "sortir de la mentalité d'indigent", "parler et agir en enfant de Dieu", "te relever de la misère à la dignité"],
-    "Sagesse": ["la sagesse qui sort du manque", "les décisions éclairées", "la bonne gestion de ce que tu as", "apprendre avant de s'engager", "compter le coût en prière", "recevoir la sagesse pour sortir du manque"],
-    "Libération": ["ta libération des blocages", "briser la peur de l'échec", "la fin des pensées limitantes", "reprendre la maîtrise de ta journée", "la paix au cœur des épreuves", "être libéré des blocages intérieurs"],
-    "Productivité": ["ta capacité à produire", "les fruits de tes mains", "fidèle dans les petites choses", "terminer ce que tu commences", "produire avant de consommer", "être rendu capable de produire"],
-    "Restauration relationnelle": ["tes relations restaurées", "la paix de ta maison", "pardonner pour avancer", "un réseau qui t'élève", "réparer avant de recommencer", "entrer dans des relations restaurées"],
-    "Provision Active": ["ta provision avec action", "les portes que Dieu ouvre", "répondre par l'obéissance", "préparer le terrain de ta moisson", "faire fructifier ce qui t'est donné", "l'accès à une provision avec action humaine"],
-    "Générosité": ["devenir une source pour les autres", "la générosité qui multiplie", "bénir autour de toi", "élever quelqu'un avec toi", "donner avec joie", "devenir à ton tour une source"],
+    "Dignité": ["ta dignité en Christ", "ta valeur retrouvée", "ta place dans le dessein de Dieu", "sortir de la mentalité d'indigent", "parler et agir en enfant de Dieu", "te relever de la misère à la dignité", "répondre à ton appel", "renoncer à t'effacer"],
+    "Sagesse": ["la sagesse qui sort du manque", "les décisions éclairées", "la bonne gestion de ce que tu as", "apprendre avant de s'engager", "compter le coût en prière", "recevoir la sagesse pour sortir du manque", "consulter avant de décider", "refuser les fausses solutions"],
+    "Libération": ["ta libération des blocages", "briser la peur de l'échec", "la fin des pensées limitantes", "reprendre la maîtrise de ta journée", "la paix au cœur des épreuves", "être libéré des blocages intérieurs", "couper avec le fatalisme", "marcher sans la honte"],
+    "Productivité": ["ta capacité à produire", "les fruits de tes mains", "fidèle dans les petites choses", "terminer ce que tu commences", "produire avant de consommer", "être rendu capable de produire", "bâtir dans la discipline", "agir pendant qu'il fait jour"],
+    "Restauration relationnelle": ["tes relations restaurées", "la paix de ta maison", "pardonner pour avancer", "un réseau qui t'élève", "réparer avant de recommencer", "entrer dans des relations restaurées", "renouer avec ta famille", "te réconcilier avec ton passé"],
+    "Provision Active": ["ta provision avec action", "les portes que Dieu ouvre", "répondre par l'obéissance", "préparer le terrain de ta moisson", "faire fructifier ce qui t'est donné", "l'accès à une provision avec action humaine", "frapper à la bonne porte", "saisir l'opportunité qui passe"],
+    "Générosité": ["devenir une source pour les autres", "la générosité qui multiplie", "bénir autour de toi", "élever quelqu'un avec toi", "donner avec joie", "devenir à ton tour une source", "partager ce que tu as reçu", "semer pour les autres"],
 }
 
 
