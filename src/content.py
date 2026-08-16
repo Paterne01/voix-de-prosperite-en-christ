@@ -93,36 +93,50 @@ LOCAL_ANGLES = {
         "quand la honte te tient à l'écart", "face au jugement des proches",
         "quand tes finances ne décollent pas", "malgré ce que tu n'as pas accompli",
         "quand tu te sens invisible", "après une chute qui t'a fait douter",
+        "quand on ne te valorise pas", "au travail, là où personne ne te remarque",
+        "quand ta famille doute de toi", "devant un miroir que tu évites",
     ],
     "Sagesse": [
         "avant de signer un contrat", "quand tout le monde te presse de décider",
         "face à une offre trop belle", "avant de dépenser",
         "quand tu dois trancher seul", "après une erreur que tu veux éviter de répéter",
+        "au moment de donner un conseil", "quand l'argent parle trop fort",
+        "face à un choix qui engage demain", "quand la précipitation te guette",
     ],
     "Libération": [
         "quand la peur te paralyse", "après des années de blocage",
         "quand la même pensée revient sans cesse", "face à l'échec qui t'a marqué",
         "quand tu portes encore le passé", "au moment de recommencer à zéro",
+        "quand on t'a condamné trop tôt", "quand tu crois le mensonge sur toi",
+        "au réveil, avant que le poids revienne", "quand le regard des autres t'enchaîne",
     ],
     "Productivité": [
         "quand ta journée t'échappe", "face à la tâche que tu remets",
         "quand rien ne semble avancer", "au milieu de trop d'occupations",
         "quand tu veux vraiment produire", "avant de perdre encore une semaine",
+        "quand ton bureau te fait fuir", "au moment où l'énergie faiblit",
+        "quand les résultats tardent", "avant d'abandonner un projet qui compte",
     ],
     "Restauration relationnelle": [
         "quand la maison est en silence", "après une dispute qui a tout cassé",
         "face à un proche qui s'éloigne", "quand le pardon semble impossible",
         "au milieu d'une famille divisée", "quand tu as honte de renouer",
+        "quand l'orgueil tient la porte fermée", "au moment où les mots manquent",
+        "quand chacun attend que l'autre cède", "après une trahison que tu portes",
     ],
     "Provision Active": [
         "quand les portes semblent fermées", "face à une opportunité qui passe",
         "quand tu as tout essayé", "au moment où le besoin se fait sentir",
         "quand la faveur tarde", "avant de renoncer à une porte ouverte",
+        "quand tes efforts ne paient pas encore", "au point de croire que c'est fini",
+        "quand l'offre paraît trop risquée", "face à une porte que tu oses à peine frapper",
     ],
     "Générosité": [
         "quand tu as peu mais veux donner", "face à quelqu'un dans le besoin",
         "quand tout le monde te demande", "au moment d'ouvrir ta main",
         "quand tu veux aider sans t'appauvrir", "avant de garder pour toi seul",
+        "quand on profite de ta bonté", "au moment où donner coûte vraiment",
+        "quand tu doutes que ton geste compte", "face à un besoin qui te dépasse",
     ],
 }
 
@@ -670,8 +684,14 @@ class ContentGenerator:
     def _build_local(self, index: int, hook_type: tuple[str, str] | None = None, pillar: str | None = None) -> Content:
         pillar = pillar or PILLARS[index % len(PILLARS)]
         focuses = LOCAL_FOCUSES.get(pillar, LOCAL_FOCUSES["Dignité"])
-        focus = focuses[(index // len(PILLARS)) % len(focuses)]
         bank = LOCAL_BANK.get(pillar, next(iter(LOCAL_BANK.values())))
+        # Mélange multiplicatif : chaque index donne une combinaison (focus, angle)
+        # différente et bien répartie sur tout l'espace, pour que la recherche d'un
+        # titre inédit ne tourne pas en rond sur des combos corrélés.
+        mix = (index * 31 + 7) % (1 << 30)
+        focus = focuses[mix % len(focuses)]
+        angles = LOCAL_ANGLES.get(pillar, LOCAL_ANGLES["Dignité"])
+        angle = angles[(mix >> 3) % len(angles)]
         topic = f"{pillar} — {focus} — {index}"
         # UN SEUL nombre pilote à la fois le titre et le nombre de points : jamais
         # deux sources indépendantes (le contrôle _validate le vérifie aussi).
@@ -686,13 +706,6 @@ class ContentGenerator:
         count_label = random.Random(index).choice([
             "clés", "pratiques", "principes", "étapes", "secrets", "manières",
         ])
-        angles = LOCAL_ANGLES.get(pillar, LOCAL_ANGLES["Dignité"])
-        # Mélange multiplicatif : chaque index donne une combinaison (focus, angle)
-        # différente et bien répartie sur tout l'espace, pour que la recherche d'un
-        # titre inédit ne tourne pas en rond sur des combos corrélés.
-        mix = (index * 31 + 7) % (1 << 30)
-        focus = focuses[mix % len(focuses)]
-        angle = angles[(mix >> 3) % len(angles)]
         title = f"{count} {count_label} pour {focus}, {angle}"
         hook_key, hook_label = hook_type or ("question_pain", "Une question qui fait mal")
         hooks = {
