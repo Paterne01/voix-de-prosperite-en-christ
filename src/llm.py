@@ -45,6 +45,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "base_url": "http://localhost:11434/v1",
         "model": "qwen2.5:3b",
         "json_mode": True,
+        "timeout": 600,
     },
     "grok": {
         "api_key_secret": "xai_api_key",
@@ -98,6 +99,7 @@ class Provider:
     model: str = ""
     json_mode: bool = True
     extra_headers: dict[str, str] = field(default_factory=dict)
+    timeout: int = REQUEST_TIMEOUT
 
     @property
     def configured(self) -> bool:
@@ -128,6 +130,7 @@ def to_provider(name: str, config: dict[str, Any]) -> Provider:
         model=spec.get("model") or DEFAULT_MODEL,
         json_mode=bool(spec.get("json_mode", True)),
         extra_headers=headers,
+        timeout=int(spec.get("timeout", REQUEST_TIMEOUT)),
     )
 
 
@@ -197,7 +200,7 @@ def chat(
     json_mode: bool = True,
     temperature: float = 0.75,
     max_tokens: int = MAX_TOKENS,
-    timeout: int = REQUEST_TIMEOUT,
+    timeout: int | None = None,
 ) -> str:
     """Un appel de chat/completions sur un provider précis. Lève en cas d'échec."""
     payload: dict[str, Any] = {
@@ -212,6 +215,7 @@ def chat(
     if json_mode and provider.json_mode:
         payload["response_format"] = {"type": "json_object"}
     url = f"{provider.base_url}/chat/completions"
+    timeout = timeout or provider.timeout
     try:
         response = requests.post(url, headers=_headers(provider), json=payload, timeout=timeout)
         response.raise_for_status()
@@ -287,6 +291,12 @@ def generate_with_fallback(
     raise LLMError(f"Tous les fournisseurs ont échoué ({detail}) : {last_error}", detail, last_error) from last_error
 
 
+def _is_timeout(exc: Exception) -> bool:
+    """Vrai quand l'erreur est un timeout réseau (provider injoignable ou trop lent)."""
+    low = str(exc).lower()
+    return "timed out" in low or "read timeout" in low or "connection timed out" in low or "timeout" in low
+
+
 def _is_exhausted_error(exc: Exception) -> bool:
     """Vrai quand re-tenter CE provider est inutile sur le court terme.
 
@@ -341,6 +351,7 @@ def generate_with_retry(
     if not providers:
         raise LLMError("Aucun provider LLM configuré", "none")
     dead: set[str] = set()
+    consecutive_timeouts: dict[str, int] = {}
     last_error: Exception | None = None
     attempted: list[str] = []
     for provider in providers:
@@ -366,6 +377,15 @@ def generate_with_retry(
                 last_error = exc
                 if _is_exhausted_error(exc):
                     dead.add(provider.name)
+                elif _is_timeout(exc):
+                    # Timeout répété : le provider ne répond pas en temps utile
+                    # (Ollama local saturé, réseau bloqué) → on le laisse tomber
+                    # au lieu de perdre la génération entière sur des retries.
+                    consecutive_timeouts[provider.name] = consecutive_timeouts.get(provider.name, 0) + 1
+                    if consecutive_timeouts[provider.name] >= 2:
+                        dead.add(provider.name)
+                else:
+                    consecutive_timeouts[provider.name] = 0
     detail = " ; ".join(attempted) if attempted else "aucun provider configuré"
     raise LLMError(f"Tous les fournisseurs ont échoué ({detail}) : {last_error}", detail, last_error) from last_error
 
