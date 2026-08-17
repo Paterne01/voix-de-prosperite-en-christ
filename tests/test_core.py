@@ -306,3 +306,36 @@ def test_generate_uses_local_only_when_all_keyed_providers_fail(monkeypatch, tmp
     content = generator.generate(prompt="SYSTÈME")
     assert content.pillar in DEFAULT_WEEK_PILLARS.values()
     assert content.title.startswith(("{", "[")) or " pour " in content.title
+
+
+def test_publish_bloque_brouillon_local_sans_toucher_reseaux(tmp_path, monkeypatch):
+    """Un contenu retombé sur le générateur local (IA en échec) ne doit JAMAIS
+    partir sur les réseaux : statut `failed` dans la base, aucun appel réseau."""
+    from src.service import PreparedPost, PublicationService
+
+    config = {"paths": {"database": str(tmp_path / "h.sqlite3"), "texts": str(tmp_path / "texts")}}
+    (tmp_path / "texts").mkdir(exist_ok=True)
+    db = HistoryDatabase(config["paths"]["database"])
+    logger = type("L", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None, "exception": lambda *a, **k: None, "error": lambda *a, **k: None})()
+    service = PublicationService(config, logger)
+    service.database = db  # chemins de test, pas la vraie base
+
+    content = ContentGenerator(db)._local(
+        {field: set() for field in ("title", "topic", "verse_reference", "cta", "decor")}
+    )
+    assert getattr(content, "local_fallback", False) is True
+
+    monkeypatch.setattr(
+        service, "prepare",
+        lambda *a, **kw: PreparedPost(content, None, None, "image", None, None),
+    )
+    # Aucun réseau ne doit être appelé.
+    for name in ("_publish_facebook_image", "_publish_facebook_reels", "_publish_youtube", "_publish_tiktok"):
+        monkeypatch.setattr(service, name, lambda *a, **k: (_ for _ in ()).throw(AssertionError(f"{name} ne doit pas être appelé")))
+
+    result = service.publish(dry_run=False)
+    assert result["status"] == "failed"
+    assert "rien n'a été publié" in result["message"]
+    record = db.get(result["id"])
+    assert record["status"] == "failed"
+    assert record["facebook_post_id"] is None

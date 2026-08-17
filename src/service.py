@@ -194,6 +194,26 @@ class PublicationService:
                 "background": background,
             }
 
+        # Garde-fou ANTI-BROUILLON : un contenu issu du générateur local (tous
+        # les providers IA en échec : quota, clé invalide, HF hors ligne) n'est
+        # PAS un post prêt. On le consigne en échec visible dans le tableau de
+        # bord et on ne touche à AUCUN réseau : jamais publier un brouillon.
+        if getattr(content, "local_fallback", False):
+            msg = (
+                "Génération IA indisponible : contenu resté au brouillon local, "
+                "rien n'a été publié. Vérifie les clés/quotas puis relance."
+            )
+            self.database.update(publication_id, status="failed", error=msg)
+            self.logger.warning("Publication %s bloquée (brouillon local) : %s", publication_id, msg)
+            return {
+                "id": publication_id,
+                "status": "failed",
+                "format": format,
+                "format_name": format_name,
+                "message": msg,
+                "content": content.to_dict(),
+            }
+
         if not image_path:
             msg = "Image en attente de validation manuelle : aucune publication envoyée."
             self.database.update(publication_id, status="awaiting_image", error=msg)

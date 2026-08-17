@@ -79,4 +79,6 @@ def run_catch_up(config: dict, service, dry_run: bool = False, forced_output: st
             result = run_slot(config, service, fmt, slot, f"{now.date().isoformat()}T{slot}", dry_run=dry_run)
             results.append({"creneau": slot, "format": label, "result": result})
             print(f"[{slot}] {label or 'defaut'}: " + str(result))
-    return {"status": "done", "published": len(results), "creneaux": results}
+    published = sum(1 for r in results if r["result"].get("status") in ("published", "partial"))
+    blocked = sum(1 for r in results if r["result"].get("status") == "failed")
+    return {"status": "done", "published": published, "bloqués": blocked, "creneaux": results}

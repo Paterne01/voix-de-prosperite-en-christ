@@ -383,6 +383,7 @@ class DeclarationGenerator:
             try:
                 content = self._build_local(index, pillar=pillar)
                 self._validate(content, exclusions)
+                content.local_fallback = True
                 return content
             except ValueError as exc:
                 last_error = str(exc)
