@@ -43,7 +43,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     "ollama": {
         "api_key_secret": None,  # local, pas de clé
         "base_url": "http://localhost:11434/v1",
-        "model": "llama3.1",
+        "model": "qwen2.5:3b",
         "json_mode": True,
     },
     "grok": {
