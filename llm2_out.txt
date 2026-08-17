@@ -1,2 +1,0 @@
-LLM FAIL: 721.5 s
-Tous les fournisseurs ont échoué (gemini ; openrouter ; grok ; nvidia ; zen ; deepseek ; ollama) : Échec ollama (qwen2.5:3b) : HTTPConnectionPool(host='localhost', port=11434): Read timed out. (read timeout=120)
