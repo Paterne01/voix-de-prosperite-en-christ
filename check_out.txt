@@ -1,0 +1,9 @@
+--- DUREES (5 premieres videos pending) ---
+  La sagesse créatrice de Dieu - Libérez votre potentiel maint -> 63.3s (LONGUE)
+  Leçons d'entrepreneuriat de Jésus - Grandissez avec nous ! - -> 74.5s (LONGUE)
+  Le Saint-Esprit - Régénération, imagination et ordre divin - -> 66.2s (LONGUE)
+  5 vérités divines pour transformer votre foi et vos actions  -> 60.6s (LONGUE)
+  Paul le fabricant de tentes - Mission et entreprise combinée -> 79.7s (LONGUE)
+
+--- POST FACEBOOK 235 existe-t-il ? ---
+  HTTP 400 | {"error":{"message":"(#100) Tried accessing nonexisting field (type)","type":"OAuthException","code":100,"fbtrace_id":"ATev0VH8Bnot9QM-LuQdjPK"}}
