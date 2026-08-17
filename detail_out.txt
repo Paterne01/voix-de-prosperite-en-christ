@@ -1,0 +1,53 @@
+ID 234
+    title = La créativité,
+    status = published
+    facebook_post_id = 1601156165016204
+    facebook_url = https://www.facebook.com/269740249556872/videos/1601156165016204
+    youtube_video_id = lPukJiqxUeo
+    format = manual
+    format_name = Manuel
+    scheduled_for = 2026-08-17T20:00
+    source_filename = Débloquer la créativité chrétienne - Bien plus que de l'art - extrait d'un enseignement du Docteur Athoms Mbuma sur teac
+
+ID 235
+    title = Ta créativité est
+    status = published
+    facebook_post_id = 2269443887290824
+    facebook_url = https://www.facebook.com/269740249556872/videos/2269443887290824
+    youtube_video_id = sB6kAiw86h0
+    format = manual
+    format_name = Manuel
+    scheduled_for = 2026-08-17T20:00
+    source_filename = Débloquer la créativité chrétienne - Bien plus que de l'art - extrait d'un enseignement du Docteur Athoms Mbuma sur teac
+
+ID 233
+    title = 3 étapes pour répondre à ton appel, quand tes finances ne décollent pas
+    status = failed
+    error = Génération IA indisponible : contenu resté au brouillon local, rien n'a été publié. Vérifie les clés/quotas puis relance
+    format = video
+    format_name = Clés de la Prospérité
+    scheduled_for = 2026-08-17T16:00
+
+ID 236
+    title = 6 étapes pour sortir de la mentalité d'indigent, quand tu te sens invisible
+    status = prepared
+    format = video
+    format_name = Clés de la Prospérité
+    scheduled_for = 2026-08-17T16:00
+
+ID 237
+    title = Dès cette heure, cette promesse agit dans ta réalité. Tu n'es pas une charge ni un oublié : tu es un fils, une fille rel
+    status = failed
+    error = Génération IA indisponible : contenu resté au brouillon local, rien n'a été publié. Vérifie les clés/quotas puis relance
+    format = declaration
+    format_name = Déclarations prophétiques
+    scheduled_for = 2026-08-17T00:00
+
+ID 238
+    title = 3 principes pour ta valeur retrouvée, quand tes finances ne décollent pas
+    status = failed
+    error = Génération IA indisponible : contenu resté au brouillon local, rien n'a été publié. Vérifie les clés/quotas puis relance
+    format = video
+    format_name = Clés de la Prospérité
+    scheduled_for = 2026-08-17T16:00
+
