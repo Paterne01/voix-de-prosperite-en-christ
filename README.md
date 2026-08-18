@@ -56,7 +56,7 @@ La génération, la base historique et les images sont indépendantes du canal. 
 
 L’application peut publier les **vidéos** (format vidéo uniquement) sur TikTok via la Content Posting API.
 
-1. Créez une app TikTok Developers, ajoutez Login Kit + Content Posting API (scopes `video.publish`, `user.info.basic`) et enregistrez la redirection `http://127.0.0.1:*/callback/`.
+1. Créez une app TikTok Developers, ajoutez Login Kit + Content Posting API (scopes `video.publish`, `user.info.basic`) et enregistrez la redirection `http://127.0.0.1:8765/callback/`.
 2. Dans l’interface, saisissez **TikTok Client Key** et **TikTok Client Secret** (coffre Windows), puis cliquez sur **Connecter TikTok** pour autoriser le compte.
 3. Cochez **TikTok** dans la configuration et enregistrez.
 4. Lancez un test : `python run_job.py --dry-run --format video`, puis une publication forcée depuis l’interface.
@@ -67,3 +67,23 @@ Notes importantes :
 - Les vidéos sont des créations IA : le flag `is_aigc` (`true` par défaut) les étiquette automatiquement « AI-generated », conformément aux règles TikTok.
 - Le flux technique est : `video/init` → upload du fichier en chunks (PUT `Content-Range`) → attente du statut `status/fetch` (`PUBLISH_COMPLETE` ou `FAILED`). Les jetons se rafraîchissent automatiquement.
 - Déconnexion/réautorisation : re-cliquez sur **Connecter TikTok** en cas de jeton refusé.
+
+### Review d’app TikTok (approbation production)
+
+Avant de soumettre l’app à la review TikTok, vérifiez que ces champs sont cohérents (un nom ou une URL incohérents font rejeter la révision) :
+
+| Champ | Valeur attendue |
+| --- | --- |
+| **App name** | Doit **correspondre au Desktop URL** (le site). Utilisez « Voix de Prospérité en Christ » ou « VPC — Publication automatique », pas le nom de l’outil de développement (ex. « opencode auto post vpc » est rejeté). |
+| **Category** | Education (ou la catégorie de la page). |
+| **Description** | Décrivez l’usage réel : app de bureau Windows qui publie les vidéos de la page sur TikTok, Facebook et YouTube. |
+| **Terms of Service URL** | `https://paterne01.github.io/vpc-pages/terms.html` |
+| **Privacy Policy URL** | `https://paterne01.github.io/vpc-pages/privacy.html` |
+| **Web/Desktop URL** | `https://paterne01.github.io/vpc-pages/` |
+| **Redirect URI** (Login Kit → Web/Desktop) | `http://127.0.0.1:8765/callback/` — obligatoire, sinon le bouton **Connecter TikTok** échoue. Ajoutez ce URI exact (pas de `*`). |
+| **Scopes** | `video.publish` (Direct Post), `video.upload`, `user.info.basic` (Login Kit). |
+| **Démo vidéo** | Au moins 1 démo end-to-end : lancement de l’app, connexion TikTok (OAuth), sélection du format vidéo, publication, confirmation sur le profil. Le domaine de la démo doit correspondre au site fourni. |
+
+La note du reviewer « The app name do not match the desktop URL » signifie que le nom de l’app ne correspond pas au site : corrigez le **App name** (et vérifiez le **Desktop URL**) puis resoumettez la révision.
+
+Rappel du flux de publication TikTok dans cette app : seuls les posts vidéo sont publiés (`SELF_ONLY` tant que l’app n’est pas approuvée).
