@@ -123,7 +123,7 @@ class FacebookReelsPublisher(BasePublisher):
                     "offset": "0",
                     "file_size": str(video_path.stat().st_size),
                 },
-                data=iter(lambda: handle.read(1024 * 1024), b""),
+                data=handle.read(),
                 timeout=900,
             )
         transfer.raise_for_status()
