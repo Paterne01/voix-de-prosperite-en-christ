@@ -595,11 +595,15 @@ class ContentGenerator:
         system_prompt = prompt or SYSTEM_PROMPT
 
         def build_prompt(avoid: str | None = None) -> str:
+            # Prompt allégé : on ne sérialise que les 20 derniers éléments par
+            # champ (fenêtre de contexte des modèles). La validation _validate
+            # reste complète (180) côté mémoire.
+            slim = {f: v[-20:] for f, v in exclusions.items()}
             text = (
                 f"{system_prompt}\nPilier obligatoire : {pillar}.\n"
                 f"Type d'accroche IMPOSÉ pour le champ \"hook\" : « {hook_label} » "
                 f"(clé : {hook_key}). Construis le hook selon ce type, sans jamais le nommer.\n"
-                f"Éléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
+                f"Éléments interdits 90 jours : {json.dumps(slim, ensure_ascii=False)}"
             )
             if avoid:
                 text += (
@@ -646,7 +650,7 @@ class ContentGenerator:
             f"{system_prompt}\nPilier obligatoire : {pillar}.\n"
             f"Type d'accroche IMPOSÉ pour le champ \"hook\" : « {hook_label} » "
             f"(clé : {hook_key}). Construis le hook selon ce type, sans jamais le nommer.\n"
-            f"Éléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
+            f"Éléments interdits 90 jours : {json.dumps({f: v[-20:] for f, v in exclusions.items()}, ensure_ascii=False)}"
         )
         if avoid:
             prompt_text += (

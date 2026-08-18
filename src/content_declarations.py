@@ -319,10 +319,11 @@ class DeclarationGenerator:
         system_prompt = prompt or SYSTEM_PROMPT_DECLARATION
 
         def build_prompt(avoid: str | None = None) -> str:
+            slim = {f: v[-20:] for f, v in exclusions.items()}
             text = (
                 f"{system_prompt}\n"
                 f"Pilier obligatoire : {pillar}.\n"
-                f"Éléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
+                f"Éléments interdits 90 jours : {json.dumps(slim, ensure_ascii=False)}"
             )
             if avoid:
                 text += (
@@ -360,7 +361,7 @@ class DeclarationGenerator:
         prompt_text = (
             f"{system_prompt}\n"
             f"Pilier obligatoire : {pillar}.\n"
-            f"Éléments interdits 90 jours : {json.dumps(exclusions, ensure_ascii=False)}"
+            f"Éléments interdits 90 jours : {json.dumps({f: v[-20:] for f, v in exclusions.items()}, ensure_ascii=False)}"
         )
         if avoid:
             prompt_text += (
