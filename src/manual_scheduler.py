@@ -82,6 +82,21 @@ def run_manual(config: dict, service, logger, dry_run: bool = False) -> dict:
     if not files:
         return {"status": "idle", "message": "Aucun contenu en attente."}
 
+    # Anti-doublon : un fichier déjà publié avec succès (ou en cours de
+    # publication par un tour qui se chevauche) n'est JAMAIS republié.
+    already = [
+        f for f in files
+        if service.database.manual_source_published(f["name"])
+    ]
+    for stale in already:
+        logger.warning(
+            "Fichier déjà publié %r ignoré (anti-doublon), nettoyage.", stale["name"]
+        )
+        delete_pending(config, stale["name"])
+    files = [f for f in files if f not in already]
+    if not files:
+        return {"status": "idle", "message": "Aucun contenu en attente."}
+
     # On ne publie que des fichiers dont la copie est terminée (mtime > 60 s).
     files = [
         f for f in files

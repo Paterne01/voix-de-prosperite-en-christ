@@ -209,6 +209,21 @@ class HistoryDatabase:
             ).fetchone()
         return row is not None
 
+    def manual_source_published(self, filename: str) -> bool:
+        """Vrai si un fichier importé a DÉJÀ été publié avec succès (anti-doublon).
+
+        Couvre les statuts réussis (published/partial) mais aussi les créneaux
+        en cours (in_progress/pending) : deux tours manuels qui se chevauchent
+        ne doivent pas publier le même fichier deux fois.
+        """
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM publications WHERE source_filename = ? AND format = 'manual' "
+                "AND status IN ('published', 'partial', 'in_progress', 'pending') LIMIT 1",
+                (filename,),
+            ).fetchone()
+        return row is not None
+
     # ── formats personnalisables ─────────────────────────────────────
 
     @staticmethod

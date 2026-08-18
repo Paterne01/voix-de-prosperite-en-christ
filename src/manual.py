@@ -72,10 +72,25 @@ def list_pending(config: dict) -> list[dict]:
 
 
 def delete_pending(config: dict, name: str) -> bool:
+    """Supprime un fichier en attente, en réessayant si un processus le verrouille.
+
+    Sur Windows, la suppression peut échouer avec WinError 32 (fichier utilisé
+    par un autre processus, ex. ffprobe qui lit encore la durée). On réessaie
+    pendant quelques secondes avant d'abandonner.
+    """
     path = pending_dir(config) / name
-    if path.is_file():
-        path.unlink()
+    if not path.is_file():
         return True
+    import time
+
+    for attempt in range(6):
+        try:
+            path.unlink()
+            return True
+        except OSError:
+            if attempt == 5:
+                return False
+            time.sleep(1.5)
     return False
 
 
