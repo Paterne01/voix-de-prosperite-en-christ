@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import requests
@@ -135,7 +136,6 @@ class FacebookReelsPublisher(BasePublisher):
                 "upload_session_id": upload_session_id,
                 "description": description,
                 "published": "true",
-                "video_state": "PUBLISHED",
                 "access_token": self.token,
             },
             timeout=60,
