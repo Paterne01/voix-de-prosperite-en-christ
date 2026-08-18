@@ -40,6 +40,10 @@ L’application envoie l’image sur `/{page-id}/photos`, récupère l’identif
 
 Pour sauvegarder, arrêtez l’application puis copiez ces quatre dossiers dans un emplacement sûr. Pour restaurer, remettez-les à la même place. Les clés restent dans le coffre Windows du compte qui les a enregistrées : réenregistrez-les après un changement de PC.
 
+## Anti-ressemblance des commentaires
+
+Chaque nouveau « détail en commentaire » est comparé à tous les commentaires publiés sur 90 jours (similarité de Jaccard sur les mots-clés, sans hashtags). Si un brouillon est trop proche d’un post récent (seuil 0,32), il est rejeté et régénéré jusqu’à ce qu’il soit vraiment distinct — un même commentaire ne peut plus être publié deux fois, même reformulé. La vérification porte sur le commentaire complet (titre + points + vérité + CTA), pas seulement sur le titre.
+
 ## Maintenance et dépannage
 
 - Lancez `python run_job.py --dry-run` pour vérifier une génération sans publier.
