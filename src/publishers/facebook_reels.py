@@ -122,8 +122,8 @@ class FacebookReelsPublisher(BasePublisher):
                     "offset": "0",
                     "file_size": str(video_path.stat().st_size),
                 },
-                data=handle.read(),
-                timeout=300,
+                data=iter(lambda: handle.read(1024 * 1024), b""),
+                timeout=900,
             )
         transfer.raise_for_status()
 
@@ -134,6 +134,8 @@ class FacebookReelsPublisher(BasePublisher):
                 "video_id": video_id,
                 "upload_session_id": upload_session_id,
                 "description": description,
+                "published": "true",
+                "video_state": "PUBLISHED",
                 "access_token": self.token,
             },
             timeout=60,

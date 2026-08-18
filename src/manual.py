@@ -86,8 +86,38 @@ def humanize_filename(name: str) -> str:
     return stem
 
 
+def _looks_complete(text: str, min_length: int = 40) -> bool:
+    """Vrai quand un texte généré par l'IA semble complet (ni tronqué, ni vide).
+
+    Une réponse coupée (finish=length ou sortie interrompue) finit souvent par
+    une virgule, un tiret, un espace ou une préposition sans ponctuation finale.
+    On refuse aussi les sorties minuscules qui ne tiennent pas une phrase.
+    """
+    t = (text or "").strip()
+    if len(t) < min_length:
+        return False
+    last = t[-1]
+    if last in ",;:-—–•|":
+        return False
+    # Une phrase française raisonnable se termine par une ponctuation forte
+    # (ou une emoji / guillemet fermant pour les légendes religieuses).
+    if last.isalpha() or last.isdigit():
+        return False
+    return True
+
+
+def _validate_caption(raw) -> None:
+    if not _looks_complete(str(raw), min_length=30):
+        raise ValueError(f"Légende tronquée ou trop courte : {str(raw)[:60]!r}")
+
+
 def generate_caption(filename: str) -> str:
-    """Légende générée par l'IA depuis le nom du fichier (repli : nom lisible)."""
+    """Légende générée par l'IA depuis le nom du fichier (repli : nom lisible).
+
+    La réponse est refusée si elle est trop courte ou visiblement coupée :
+    chaque provider configuré est alors essayé, et si tous échouent on retombe
+    sur une légende déterministe complète (jamais de texte tronqué publié).
+    """
     from .config import load_config
 
     humanized = humanize_filename(filename)
@@ -103,9 +133,10 @@ def generate_caption(filename: str) -> str:
             f"Nom du fichier : {filename}",
             do_json=False,
             max_tokens=120,
+            validate=_validate_caption,
         )
         caption = str(raw).strip()
-        return caption[:280] or f"{humanized} — reçois cette parole. 🙏"
+        return caption[:280]
     except Exception:
         return f"{humanized} — reçois cette parole et laisse-la agir dans ta journée. 🙏"
 
@@ -117,6 +148,21 @@ _DEFAULT_YOUTUBE_TAGS = [
 ]
 
 
+def _validate_youtube_meta(data) -> None:
+    """Refuse des métadonnées YouTube tronquées (titre coupé, description vide)."""
+    if not isinstance(data, dict):
+        raise ValueError(f"Métadonnées YouTube non JSON : {str(data)[:60]!r}")
+    title = str(data.get("title") or "").strip()
+    if len(title) < 15:
+        raise ValueError(f"Titre YouTube trop court : {title!r}")
+    description = str(data.get("description") or "").strip()
+    if not _looks_complete(description, min_length=30):
+        raise ValueError(f"Description YouTube tronquée : {description[:60]!r}")
+    tags = data.get("tags") or []
+    if not isinstance(tags, list) or not tags:
+        raise ValueError("Métadonnées YouTube sans tags")
+
+
 def generate_youtube_metadata(filename: str, caption: str, *, long_video: bool = False) -> dict:
     """Titre, tags et description optimisés pour YouTube, générés par l'IA
     depuis le nom du fichier + la légende.
@@ -124,8 +170,8 @@ def generate_youtube_metadata(filename: str, caption: str, *, long_video: bool =
     Retourne {"title", "tags", "description"}. La description reprend la
     légende (le texte visible Facebook/TikTok) ; les tags servent au champ
     « tags » de YouTube ; le titre est optimisé pour la recherche. Repli
-    déterministe si l'IA est absente ou échoue. `long_video` adapte le
-    vocabulaire (Short vs vidéo classique).
+    déterministe si l'IA est absente, échoue OU renvoie des métadonnées
+    tronquées. `long_video` adapte le vocabulaire (Short vs vidéo classique).
     """
     from .config import load_config
 
@@ -150,6 +196,7 @@ def generate_youtube_metadata(filename: str, caption: str, *, long_video: bool =
             ),
             do_json=True,
             max_tokens=300,
+            validate=_validate_youtube_meta,
         )
         title = str(data.get("title", "")).strip() or fallback["title"]
         tags = [

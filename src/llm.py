@@ -268,11 +268,14 @@ def generate_with_fallback(
     do_json: bool = True,
     temperature: float = 0.75,
     max_tokens: int = MAX_TOKENS,
+    validate=None,
 ) -> tuple[dict | str, str]:
     """Essaie chaque provider configuré dans l'ordre, renvoie (réponse, provider).
 
     `do_json=True` force un objet JSON ; sinon la réponse texte brute est
-    renvoyée. Lève LLMError si TOUS les providers échouent.
+    renvoyée. `validate(data)` est appelé sur chaque réponse : s'il lève
+    ValueError, la réponse est écartée et on essaie le provider suivant.
+    Lève LLMError si TOUS les providers échouent.
     """
     providers = ordered_providers(config)
     last_error: Exception | None = None
@@ -282,9 +285,11 @@ def generate_with_fallback(
         try:
             if do_json:
                 data = chat_json(provider, system_prompt, prompt_text, temperature=temperature, max_tokens=max_tokens)
-                return data, provider.name
-            raw = chat(provider, system_prompt, prompt_text, json_mode=False, temperature=temperature, max_tokens=max_tokens)
-            return raw, provider.name
+            else:
+                data = chat(provider, system_prompt, prompt_text, json_mode=False, temperature=temperature, max_tokens=max_tokens)
+            if validate is not None:
+                validate(data)
+            return data, provider.name
         except Exception as exc:
             last_error = exc
     detail = " ; ".join(attempted) if attempted else "aucun provider configuré"
