@@ -82,7 +82,7 @@ DEFAULT_FALLBACK_ORDER = [
 
 DEFAULT_MODEL = "gemini-2.5-flash"
 REQUEST_TIMEOUT = 120
-MAX_TOKENS = 1200
+MAX_TOKENS = 2048
 
 
 @dataclass
@@ -315,6 +315,7 @@ def _is_exhausted_error(exc: Exception) -> bool:
         "invalid_api_key", "invalid api key", "api key not", "unauthorized",
         "authentication", "401", "forbidden", "permission denied", "aucune clé configurée",
         "json invalide", "réponse vide", "réponse non json", "token",
+        "contenu vide", "finish=length", "finish length", "tronqué", "truncat",
     )
     return any(m in low for m in markers)
 
@@ -352,6 +353,7 @@ def generate_with_retry(
         raise LLMError("Aucun provider LLM configuré", "none")
     dead: set[str] = set()
     consecutive_timeouts: dict[str, int] = {}
+    validation_failures: dict[str, int] = {}
     last_error: Exception | None = None
     attempted: list[str] = []
     for provider in providers:
@@ -372,7 +374,12 @@ def generate_with_retry(
                 return data, provider.name
             except ValueError as exc:
                 # Brouillon rejeté (doublon, points incohérents) : on reformule.
+                # Un provider qui re-tronque le JSON (points < 3) est écarté
+                # après 2 rejets consécutifs : reformuler ne le réparera pas.
                 last_error = exc
+                validation_failures[provider.name] = validation_failures.get(provider.name, 0) + 1
+                if validation_failures[provider.name] >= 2:
+                    dead.add(provider.name)
             except Exception as exc:
                 last_error = exc
                 if _is_exhausted_error(exc):
