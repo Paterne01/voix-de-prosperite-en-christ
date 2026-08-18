@@ -1,13 +1,15 @@
 """Client LLM unifié multi-fournisseurs (API compatible OpenAI /chat/completions).
 
-Tous les fournisseurs majeurs (Gemini, OpenRouter, Ollama, Grok/xAI, NVIDIA
-NIM, Z.ai/Zhipu, OpenAI) exposent un endpoint `/chat/completions` compatible
-OpenAI. Ce module les regroupe sous une seule interface : l'app choisit un
-fournisseur via `config.ai.provider`, mais peut basculer automatiquement sur un
-autre fournisseur configuré quand le premier échoue (quota, panne, 5xx).
+Tous les fournisseurs majeurs (Gemini, OpenRouter, Grok/xAI, NVIDIA NIM,
+Z.ai/Zhipu, OpenAI, DeepSeek) exposent un endpoint `/chat/completions`
+compatible OpenAI. Ce module les regroupe sous une seule interface : l'app
+choisit un fournisseur via `config.ai.provider`, mais peut basculer
+automatiquement sur un autre fournisseur configuré quand le premier échoue
+(quota, panne, 5xx).
 
-Priorité de génération du système (inchangée philosophie du projet) :
-    fournisseur(s) LLM configuré(s)  →  Hugging Face  →  générateur local.
+Priorité de génération du système :
+    fournisseur(s) LLM configuré(s)  →  Hugging Face  →  générateur local
+    déterministe (sans IA).
 
 Le générateur local ne doit SERVIR QU'EN DERNIER RECOURS : chaque échec d'un
 fournisseur remonte une exception pour que l'appelant bascule proprement.
@@ -24,9 +26,9 @@ import requests
 from .secrets import get_secret
 
 # ── Registre des fournisseurs ────────────────────────────────────────────────
-# Chaque entrée : nom de clé de secret (`api_key_secret`, None si clé inutile
-# comme Ollama local), base_url par défaut et modèle par défaut. Tout est
-# surchargeable dans `config.ai.providers.<nom>`.
+# Chaque entrée : nom de clé de secret (`api_key_secret`), base_url par défaut
+# et modèle par défaut. Tout est surchargeable dans `config.ai.providers.<nom>`.
+# Tous les fournisseurs exigent une clé (aucun modèle local embarqué).
 PROVIDERS: dict[str, dict[str, Any]] = {
     "gemini": {
         "api_key_secret": "gemini_api_key",
@@ -39,13 +41,6 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "base_url": "https://openrouter.ai/api/v1",
         "model": "meta-llama/llama-3.3-70b-instruct:free",
         "json_mode": True,
-    },
-    "ollama": {
-        "api_key_secret": None,  # local, pas de clé
-        "base_url": "http://localhost:11434/v1",
-        "model": "qwen2.5:3b",
-        "json_mode": True,
-        "timeout": 600,
     },
     "grok": {
         "api_key_secret": "xai_api_key",
@@ -82,7 +77,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
 # Ordre de bascule par défaut quand un provider échoue. modifiable via
 # `config.ai.fallback_order`.
 DEFAULT_FALLBACK_ORDER = [
-    "gemini", "openrouter", "grok", "nvidia", "zen", "deepseek", "ollama", "openai",
+    "gemini", "openrouter", "grok", "nvidia", "zen", "deepseek", "openai",
 ]
 
 DEFAULT_MODEL = "gemini-2.5-flash"
@@ -103,7 +98,7 @@ class Provider:
 
     @property
     def configured(self) -> bool:
-        return bool(self.api_key or self.api_key_secret is None)
+        return bool(self.api_key)
 
 
 def _resolve_provider_name(config: dict[str, Any]) -> str:
@@ -139,7 +134,7 @@ def ordered_providers(config: dict[str, Any]) -> list[Provider]:
 
     - Le provider principal (config.ai.provider) passe en tête s'il est présent et clé dispo.
     - Ensuite `config.ai.fallback_order` (ou l'ordre par défaut) : seuls ceux
-      ayant une clé sont conservés (Ollama local n'en exige pas).
+      ayant une clé sont conservés.
     - Dédupliqué, sans doublon.
     """
     ai = config.get("ai") or {}
@@ -384,8 +379,8 @@ def generate_with_retry(
                     dead.add(provider.name)
                 elif _is_timeout(exc):
                     # Timeout répété : le provider ne répond pas en temps utile
-                    # (Ollama local saturé, réseau bloqué) → on le laisse tomber
-                    # au lieu de perdre la génération entière sur des retries.
+                    # (réseau bloqué) → on le laisse tomber au lieu de perdre la
+                    # génération entière sur des retries.
                     consecutive_timeouts[provider.name] = consecutive_timeouts.get(provider.name, 0) + 1
                     if consecutive_timeouts[provider.name] >= 2:
                         dead.add(provider.name)

@@ -1,8 +1,0 @@
-gemini       key=OK
-openrouter   key=OK
-ollama       key=OK
-grok         key=OK
-nvidia       key=OK
-zen          key=OK
-openai       key=OK
-deepseek     key=OK

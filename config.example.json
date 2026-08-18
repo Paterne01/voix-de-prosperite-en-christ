@@ -1,5 +1,5 @@
 {
-  "_doc": "Ceci est le fichier d'exemple. Copiez-le en config.json puis remplissez vos valeurs. Les clés inconnues (ex. _doc) sont ignorées par le programme. Section ai : fournisseur principal (provider), ordre de bascule automatique (fallback_order) et détails par provider. Chaque provider utilise une clé de secret enregistrée (dashboard > Clés sécurisées, ou .env). Si le provider principal échoue (quota, panne), l'app essaie les suivants automatiquement puis Hugging Face puis le générateur local. Testez les clés avec : python run_job.py --check-ai.",
+  "_doc": "Ceci est le fichier d'exemple. Copiez-le en config.json puis remplissez vos valeurs. Les clés inconnues (ex. _doc) sont ignorées par le programme. Section ai : fournisseur principal (provider), ordre de bascule automatique (fallback_order) et détails par provider. Chaque provider utilise une clé de secret enregistrée (dashboard > Clés sécurisées, ou .env). Si le provider principal échoue (quota, panne), l'app essaie les suivants automatiquement puis Hugging Face puis le générateur local déterministe (sans IA). Aucun modèle local n'est embarqué : chaque fournisseur exige une clé. Testez les clés avec : python run_job.py --check-ai.",
   "page_id": "",
   "timezone": "Africa/Nairobi",
   "schedule": ["00:00", "08:00", "12:00", "16:00"],
@@ -33,7 +33,6 @@
       "nvidia",
       "zen",
       "deepseek",
-      "ollama",
       "openai"
     ],
     "providers": {
@@ -46,11 +45,6 @@
         "api_key_secret": "openrouter_api_key",
         "base_url": "https://openrouter.ai/api/v1",
         "model": "meta-llama/llama-3.3-70b-instruct:free"
-      },
-      "ollama": {
-        "api_key_secret": null,
-        "base_url": "http://localhost:11434/v1",
-        "model": "llama3.1"
       },
       "grok": {
         "api_key_secret": "xai_api_key",

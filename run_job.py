@@ -38,7 +38,7 @@ def _run() -> None:
 
         ai = config.get("ai") or {}
         print(f"Provider principal configuré : {ai.get('provider', 'gemini')}")
-        print("Ordre de bascule : " + ", ".join(ai.get("fallback_order", ["gemini", "openrouter", "ollama", "grok", "nvidia", "zen", "openai"])))
+        print("Ordre de bascule : " + ", ".join(ai.get("fallback_order", ["gemini", "openrouter", "grok", "nvidia", "zen", "deepseek", "openai"])))
         print("---")
         tested = []
         for provider in ordered_providers(config):

@@ -26,11 +26,11 @@ def test_ordered_providers_skips_without_key(monkeypatch):
     assert names == ["gemini"]
 
 
-def test_ordered_providers_ollama_needs_no_key(monkeypatch):
-    config = {"ai": {"provider": "ollama"}}
+def test_ordered_providers_requires_key(monkeypatch):
+    config = {"ai": {"provider": "gemini"}}
     monkeypatch.setattr("src.llm.get_secret", lambda name: None)
     names = [p.name for p in ordered_providers(config)]
-    assert "ollama" in names
+    assert names == ["gemini"]  # aucun provider sans clé n'est utilisé
 
 
 def test_to_provider_uses_config_override():

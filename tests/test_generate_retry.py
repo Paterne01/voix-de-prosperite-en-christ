@@ -8,18 +8,18 @@ def _config():
         "ai": {
             "provider": "gemini",
             "model": "gemini-2.0-flash",
-            "fallback_order": ["openrouter", "ollama"],
+            "fallback_order": ["openrouter", "deepseek"],
             "providers": {
                 "gemini": {"base_url": "g"},
                 "openrouter": {"base_url": "o"},
-                "ollama": {"base_url": "h", "model": "llama3"},
+                "deepseek": {"base_url": "h", "model": "deepseek-chat"},
             },
         }
     }
 
 
 def _secrets(key):
-    return "k" if key in ("gemini_api_key", "openrouter_api_key") else None
+    return "k" if key in ("gemini_api_key", "openrouter_api_key", "deepseek_api_key") else None
 
 
 def test_reessaye_autre_provider_quand_credits_epuises(monkeypatch):
@@ -48,7 +48,7 @@ def test_local_n_atteint_que_si_tous_echouent(monkeypatch):
     supply = {
         "gemini": LLMError("429 quota dépassé", "gemini"),
         "openrouter": LLMError("402 payment required", "openrouter"),
-        "ollama": LLMError("connection refused", "ollama"),
+        "deepseek": LLMError("connection refused", "deepseek"),
     }
     monkeypatch.setattr(
         "src.llm.chat_json",

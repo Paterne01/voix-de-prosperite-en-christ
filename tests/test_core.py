@@ -263,7 +263,7 @@ def test_generate_uses_next_provider_when_gemini_quota_exhausted(monkeypatch, tm
         "src.llm.get_secret",
         lambda key: "k" if key in ("gemini_api_key", "openrouter_api_key") else None,
     )
-    config = {"ai": {"provider": "gemini", "fallback_order": ["openrouter", "ollama"]}}
+    config = {"ai": {"provider": "gemini", "fallback_order": ["openrouter", "deepseek"]}}
     calls: list[str] = []
 
     def fake_chat_json(provider, system_prompt, prompt_text, **kwargs):
@@ -293,7 +293,7 @@ def test_generate_uses_local_only_when_all_keyed_providers_fail(monkeypatch, tmp
         "src.llm.get_secret",
         lambda key: "k" if key == "gemini_api_key" else None,
     )
-    config = {"ai": {"provider": "gemini", "fallback_order": ["openrouter", "ollama"]}}
+    config = {"ai": {"provider": "gemini", "fallback_order": ["openrouter", "deepseek"]}}
 
     def fake_chat_json(provider, system_prompt, prompt_text, **kwargs):
         raise LLMError(f"{provider.name} : erreur", provider.name)
