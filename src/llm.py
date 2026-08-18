@@ -39,7 +39,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     "openrouter": {
         "api_key_secret": "openrouter_api_key",
         "base_url": "https://openrouter.ai/api/v1",
-        "model": "google/gemma-4-26b-a4b-it:free",
+        "model": "poolside/laguna-s-2.1:free",
         "json_mode": True,
     },
     "grok": {
