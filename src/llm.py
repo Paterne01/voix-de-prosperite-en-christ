@@ -39,7 +39,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     "openrouter": {
         "api_key_secret": "openrouter_api_key",
         "base_url": "https://openrouter.ai/api/v1",
-        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "model": "google/gemma-4-26b-a4b-it:free",
         "json_mode": True,
     },
     "grok": {
@@ -51,7 +51,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     "nvidia": {
         "api_key_secret": "nvidia_api_key",
         "base_url": "https://integrate.api.nvidia.com/v1",
-        "model": "meta-llama/Llama-3.3-70B-Instruct",
+        "model": "meta/llama-3.3-70b-instruct",
         "json_mode": True,
     },
     "zen": {
