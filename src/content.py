@@ -508,13 +508,15 @@ def _clean(value: str) -> str:
 
 
 def _tokenize(value: str) -> set[str]:
-    """Ensemble de mots-clés significatifs d'un texte (minuscules, sans mots vides)."""
+    """Ensemble de mots-clés significatifs d'un texte (minuscules, sans mots vides).
+    Les hashtags sont ignorés : constants d'un post à l'autre, ils fausseraient
+    la comparaison de similarité."""
     stopwords = {
         "pour", "de", "du", "des", "le", "la", "les", "un", "une", "et", "en", "au", "aux",
         "sur", "que", "qui", "dans", "ce", "ces", "avec", "sans", "pas", "tu", "ta", "ton",
         "tes", "toi", "ton", "tes", "c'est", "ceci", "n'est", "ne", "se", "sa", "son", "tes",
     }
-    words = re.findall(r"\b[a-z0-9]{3,}\b", value.casefold())
+    words = re.findall(r"\b[a-z0-9]{3,}\b", re.sub(r"#\S+", " ", value.casefold()))
     return {w for w in words if w not in stopwords}
 
 
@@ -561,6 +563,9 @@ class ContentGenerator:
         si TOUS les providers LLM configurés (avec clé) ont échoué, puis HF.
         """
         exclusions = {field: sorted(self.database.recent_values(field))[-180:] for field in ("title", "topic", "verse_reference", "cta", "decor")}
+        # Anti-ressemblance des « détails en commentaire » : on récupère les
+        # commentaires publiés récemment pour rejeter tout brouillon trop proche.
+        exclusions["comment_text"] = sorted(self.database.recent_values("comment_text"))[-60:]
         hook_type = self._pick_hook_type()
         if ordered_providers(self.config or {}):
             last_exc: Exception | None = None
@@ -597,8 +602,9 @@ class ContentGenerator:
         def build_prompt(avoid: str | None = None) -> str:
             # Prompt allégé : on ne sérialise que les 20 derniers éléments par
             # champ (fenêtre de contexte des modèles). La validation _validate
-            # reste complète (180) côté mémoire.
-            slim = {f: v[-20:] for f, v in exclusions.items()}
+            # reste complète (180) côté mémoire. comment_text est exclu : trop
+            # gros, la ressemblance est contrôlée uniquement par _validate.
+            slim = {f: v[-20:] for f, v in exclusions.items() if f != "comment_text"}
             text = (
                 f"{system_prompt}\nPilier obligatoire : {pillar}.\n"
                 f"Type d'accroche IMPOSÉ pour le champ \"hook\" : « {hook_label} » "
@@ -609,8 +615,10 @@ class ContentGenerator:
                 text += (
                     f"\nTon brouillon précédent a été rejeté pour ce motif : {avoid}.\n"
                     "Corrige-le maintenant : choisis un AUTRE verset, une accroche du même type "
-                    "mais avec une formulation différente, un autre appel à l'action, et vérifie "
-                    "que le nombre annoncé dans le titre égale exactement le nombre de points. "
+                    "mais avec une formulation différente, un autre appel à l'action, et surtout "
+                    "des points (heading, body, application) RADICALEMENT différents — aucun "
+                    "heading ni aucune idée ne doit répéter un post récent. Vérifie que le nombre "
+                    "annoncé dans le titre égale exactement le nombre de points. "
                     "Aucun élément interdit ci-dessus."
                 )
             return text
@@ -650,7 +658,7 @@ class ContentGenerator:
             f"{system_prompt}\nPilier obligatoire : {pillar}.\n"
             f"Type d'accroche IMPOSÉ pour le champ \"hook\" : « {hook_label} » "
             f"(clé : {hook_key}). Construis le hook selon ce type, sans jamais le nommer.\n"
-            f"Éléments interdits 90 jours : {json.dumps({f: v[-20:] for f, v in exclusions.items()}, ensure_ascii=False)}"
+            f"Éléments interdits 90 jours : {json.dumps({f: v[-20:] for f, v in exclusions.items() if f != 'comment_text'}, ensure_ascii=False)}"
         )
         if avoid:
             prompt_text += (
@@ -789,3 +797,10 @@ class ContentGenerator:
                 raise ValueError(f"Doublon sur 90 jours : {field}")
         if exclusions.get("title") and _too_close(content.title, set(exclusions["title"])):
             raise ValueError("Titre trop proche d'un post publié récemment")
+        # Anti-ressemblance des « détails en commentaire » : le commentaire est
+        # dérivé du contenu (titre + points + vérité + CTA). On le compare aux
+        # commentaires publiés sur 90 jours — un commentaire trop proche d'un
+        # autre est rejeté pour que deux posts ne se ressemblent jamais.
+        recent_comments = set(exclusions.get("comment_text", []))
+        if recent_comments and _too_close(content.comment_text, recent_comments, threshold=0.32):
+            raise ValueError("Commentaire trop proche d'un post publié récemment")

@@ -91,7 +91,7 @@ class HistoryDatabase:
                     pass
 
     def recent_values(self, column: str, days: int = 90) -> set[str]:
-        allowed = {"title", "topic", "verse_reference", "cta", "decor", "hook_type"}
+        allowed = {"title", "topic", "verse_reference", "cta", "decor", "hook_type", "comment_text"}
         if column not in allowed:
             raise ValueError("Colonne non autorisée")
         cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()

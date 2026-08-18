@@ -1,7 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 
-from src.content import HOOK_TYPES, Content, ContentGenerator, normalize_hashtags
+from src.content import HOOK_TYPES, Content, ContentGenerator, normalize_hashtags, _jaccard, _tokenize
 from src.config import DEFAULT_WEEK_PILLARS, weekday_pillar
 from src.content_declarations import DeclarationGenerator
 from src.database import HistoryDatabase
@@ -69,6 +69,49 @@ def test_comment_has_required_sections(tmp_path):
     assert "Chez toi" in content.comment_text
     assert content.hashtags
     assert any(tag in content.comment_text for tag in content.hashtags)
+
+
+def test_local_comments_never_repeat_each_other(tmp_path):
+    """Deux commentaires consécutifs ne doivent jamais se ressembler : la
+    contrainte anti-ressemblance s'applique au commentaire complet, pas
+    seulement au titre."""
+    db = HistoryDatabase(tmp_path / "history.sqlite3")
+    generator = ContentGenerator(db)
+    generated = []
+    for _ in range(40):
+        exclusions = {
+            field: {getattr(item, field).casefold() for item in generated}
+            for field in ("title", "topic", "verse_reference", "cta", "decor")
+        }
+        exclusions["comment_text"] = {item.comment_text.casefold() for item in generated}
+        content = generator._local(exclusions)
+        generated.append(content)
+    assert len(generated) == 40
+    assert len({item.title for item in generated}) == 40
+    for a in range(len(generated)):
+        for b in range(len(generated)):
+            if a == b:
+                continue
+            sim = _jaccard(_tokenize(generated[a].comment_text), _tokenize(generated[b].comment_text))
+            assert sim < 0.32, f"commentaires #{a} et #{b} trop proches : {sim:.2f}"
+
+
+def test_validate_rejects_comment_too_close_to_recent(tmp_path):
+    """Un commentaire quasi identique à un commentaire récent est rejeté."""
+    db = HistoryDatabase(tmp_path / "history.sqlite3")
+    generator = ContentGenerator(db)
+    content = generator._build_local(1)
+    exclusions = {field: set() for field in ("title", "topic", "verse_reference", "cta", "decor")}
+    exclusions["comment_text"] = {content.comment_text.casefold()}
+    content.points = content.points[:1]
+    content.title = "9 points originaux totalement inedits"
+    content.title = "9 clés totalement inédites pour une vie différente"
+    content.points = content.points * 9
+    try:
+        generator._validate(content, exclusions)
+        raise AssertionError("Le doublon de commentaire aurait dû être rejeté")
+    except ValueError as exc:
+        assert "Commentaire" in str(exc) or "Doublon" in str(exc)
 
 
 def test_validate_rejects_count_mismatch(tmp_path):
