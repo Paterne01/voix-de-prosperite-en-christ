@@ -169,15 +169,7 @@ def toggle_overlay(overlay_id: int):
     if not record:
         return jsonify(ok=False, error="Overlay introuvable."), 404
     active = request.form.get("active") == "on"
-    db.update_overlay(
-        overlay_id,
-        name=record["name"],
-        overlay_type=record["overlay_type"],
-        file_path=record.get("file_path"),
-        text_content=record.get("text_content"),
-        active=active,
-        format_scope=record.get("format_scope") or "all",
-    )
+    db.set_overlay_active(overlay_id, active)
     return jsonify(ok=True, overlays=db.list_overlays())
 
 

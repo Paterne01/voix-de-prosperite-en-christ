@@ -186,6 +186,33 @@ def test_overlay_duration_parses_json_or_default():
     assert _overlay_duration('{"x": 1}', default=2) == 2
 
 
+def test_overlay_activation_is_exclusive_per_type(tmp_path):
+    db = HistoryDatabase(tmp_path / "history.sqlite3")
+    first = db.create_overlay(name="Intro A", overlay_type="intro", active=True)
+    second = db.create_overlay(name="Intro B", overlay_type="intro", active=True)
+    # La création du second désactive le premier (un seul actif par type).
+    assert db.get_overlay(first)["active"] == 0
+    assert db.get_overlay(second)["active"] == 1
+    # Activer A doit désactiver B.
+    db.set_overlay_active(first, True)
+    assert db.get_overlay(first)["active"] == 1
+    assert db.get_overlay(second)["active"] == 0
+    # Les autres types ne sont pas affectés.
+    outro = db.create_overlay(name="Outro X", overlay_type="outro", active=True)
+    db.set_overlay_active(second, True)
+    assert db.get_overlay(second)["active"] == 1
+    assert db.get_overlay(first)["active"] == 0
+    assert db.get_overlay(outro)["active"] == 1
+    # Désactiver directement ne touche pas les autres.
+    db.set_overlay_active(second, False)
+    assert db.get_overlay(second)["active"] == 0
+    assert db.get_overlay(outro)["active"] == 1
+    # single_active_overlay renvoie le seul actif, puis None après désactivation.
+    assert db.single_active_overlay("intro") is None
+    db.set_overlay_active(first, True)
+    assert db.single_active_overlay("intro")["id"] == first
+
+
 def test_is_image_and_video_file_detection():
     from pathlib import Path
     from src.video import _is_image_file, _is_video_file

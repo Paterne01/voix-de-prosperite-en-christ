@@ -323,6 +323,11 @@ class HistoryDatabase:
         if overlay_type not in self.OVERLAY_TYPES:
             raise ValueError(f"Type d'overlay inconnu : {overlay_type}")
         with self.connect() as conn:
+            if active:
+                conn.execute(
+                    "UPDATE overlays SET active = 0 WHERE overlay_type = ?",
+                    (overlay_type,),
+                )
             cursor = conn.execute(
                 "INSERT INTO overlays (name, overlay_type, file_path, text_content, active, format_scope, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -342,6 +347,11 @@ class HistoryDatabase:
         if overlay_type not in self.OVERLAY_TYPES:
             raise ValueError(f"Type d'overlay inconnu : {overlay_type}")
         with self.connect() as conn:
+            if active:
+                conn.execute(
+                    "UPDATE overlays SET active = 0 WHERE overlay_type = ? AND id != ?",
+                    (overlay_type, overlay_id),
+                )
             conn.execute(
                 "UPDATE overlays SET name = ?, overlay_type = ?, file_path = ?, "
                 "text_content = ?, active = ?, format_scope = ? WHERE id = ?",
@@ -354,6 +364,24 @@ class HistoryDatabase:
     def delete_overlay(self, overlay_id: int) -> None:
         with self.connect() as conn:
             conn.execute("DELETE FROM overlays WHERE id = ?", (overlay_id,))
+
+    def set_overlay_active(self, overlay_id: int, active: bool) -> None:
+        """Active/désactive un overlay ; l'activation désactive les autres du
+        même type (un seul intro/outro/watermark/bandeau actif à la fois)."""
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT overlay_type FROM overlays WHERE id = ?", (overlay_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError("Overlay introuvable.")
+            if active:
+                conn.execute(
+                    "UPDATE overlays SET active = 0 WHERE overlay_type = ?",
+                    (row["overlay_type"],),
+                )
+                conn.execute("UPDATE overlays SET active = 1 WHERE id = ?", (overlay_id,))
+            else:
+                conn.execute("UPDATE overlays SET active = 0 WHERE id = ?", (overlay_id,))
 
     def active_overlays(self, overlay_type: str | None = None, format: str | None = None) -> list[dict]:
         """Overlays actifs, optionnellement filtrés par type et/ou format.
