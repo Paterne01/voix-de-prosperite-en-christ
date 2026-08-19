@@ -792,7 +792,18 @@ class ContentGenerator:
             raise ValueError(
                 "Le nombre annoncé dans le titre ne correspond pas au nombre de points développés"
             )
+        # Unicité stricte garantissable uniquement sur l'« identité » du post
+        # (titre + sujet). verse_reference, cta et decor ont un stock fini (les
+        # versets bibliques se répètent naturellement, cf. Psaume 20:5) : exiger
+        # leur inédit sur 90 jours rendrait l'échec certain dès que le stock est
+        # épuisé (tous les providers rejettent → brouillon local bloqué). On les
+        # passe seulement comme « pistes » au modèle pour la fraîcheur, sans
+        # bloquer la génération. La ressemblance réelle est déjà contrôlée par
+        # la similarité du titre et l'anti-ressemblance du commentaire ci-dessous.
+        unique = {"title", "topic"}
         for field in exclusions:
+            if field not in unique:
+                continue
             if _clean(str(getattr(content, field))).casefold() in set(exclusions[field]):
                 raise ValueError(f"Doublon sur 90 jours : {field}")
         if exclusions.get("title") and _too_close(content.title, set(exclusions["title"])):

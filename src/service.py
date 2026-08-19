@@ -22,6 +22,12 @@ FORMATS = ("video", "declaration")
 # Durée cible des Shorts selon le format (déclaration = texte court : 20-25 s).
 SHORT_DURATION = {"declaration": 22, "video": 60}
 
+# Durée au-delà de laquelle une vidéo importée manuellement est traitée comme
+# « vidéo longue » (upload /videos, non Reel). 80 s : les vidéos de 61-80 s
+# restent des Reels/Shorts, un peu au-dessus de la limite historique de 60 s
+# (Facebook/YouTube acceptent sans problème jusqu'à ~90 s).
+LONG_VIDEO_SECONDS = 80
+
 
 def _overlay_duration(text_content: str | None, default: int = 3) -> int:
     """Durée d'affichage d'un overlay image, depuis son text_content JSON.
@@ -526,16 +532,16 @@ class PublicationService:
             raise FileNotFoundError(f"Fichier introuvable : {media}")
         started = datetime.now(UTC)
 
-        # Durée de la vidéo importée : courte (<= 60 s) → Short recadré ;
-        # longue (> 60 s) → vidéo classique publiée telle quelle. L'information
-        # pilote aussi les métadonnées YouTube (vocabulaire Short vs vidéo).
+        # Durée de la vidéo importée : courte (<= 80 s) → Short/Reel publié via
+        # /video_reels ; longue (> 80 s) → vidéo classique publiée telle quelle.
+        # L'information pilote aussi les métadonnées YouTube (vocabulaire Short).
         if kind == "image":
             is_long = False
         else:
             from .video import probe_duration
 
             try:
-                is_long = probe_duration(media) > SHORT_DURATION.get("video", 60)
+                is_long = probe_duration(media) > LONG_VIDEO_SECONDS
             except Exception as exc:
                 self.logger.warning("Durée de %s inconnue (%s), traitée comme courte", media.name, exc)
                 is_long = False
