@@ -203,7 +203,12 @@ def crop_to_short(
 
     Utilisé par le Format C (fichiers importés) : la vidéo source est
     normalisée en vertical, bornée à max_duration secondes, avec sa piste
-    audio conservée. Retourne le chemin du fichier produé.
+    audio conservée. Retourne le chemin du fichier produit.
+
+    `max_duration` par défaut à 80 s (LONG_VIDEO_SECONDS côté service) : les
+    Reels acceptent ~90 s, on garde donc jusqu'à 80 s de contenu au lieu de
+    tronquer à 60 s les enseignements importés (qui durent souvent 64-80 s).
+    Les vidéos GÉNÉRÉES restent bornées à 60 s via leur propre paramètre.
     """
     src = Path(source)
     if not src.exists():

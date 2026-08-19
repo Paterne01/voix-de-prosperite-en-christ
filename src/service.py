@@ -625,14 +625,16 @@ class PublicationService:
                 video_path = self._build_video(media, self._find_audio("declaration"), format="declaration")
                 is_long = False
             elif is_long:
-                # Vidéo longue (> 60 s) → publiée telle quelle sur tous les réseaux.
+                # Vidéo longue (> 80 s) → publiée telle quelle sur tous les réseaux.
                 video_path = media
             else:
                 from .config import absolute_path as _abs
 
-                # Vidéo courte (<= 60 s) → recadrée en Short 9:16.
+                # Vidéo courte (<= 80 s) → recadrée en Short 9:16 (conserve
+                # jusqu'à 80 s : les enseignements importés durent 64-80 s).
                 video_path = crop_to_short(
-                    media, output_dir=_abs(self.config["paths"].get("videos", "Videos"))
+                    media, output_dir=_abs(self.config["paths"].get("videos", "Videos")),
+                    max_duration=LONG_VIDEO_SECONDS,
                 )
             created_media.append(video_path)
         except Exception as exc:

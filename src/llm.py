@@ -375,10 +375,10 @@ def generate_with_retry(
             except ValueError as exc:
                 # Brouillon rejeté (doublon, points incohérents) : on reformule.
                 # Un provider qui re-tronque le JSON (points < 3) est écarté
-                # après 2 rejets consécutifs : reformuler ne le réparera pas.
+                # après 3 rejets consécutifs : reformuler ne le réparera pas.
                 last_error = exc
                 validation_failures[provider.name] = validation_failures.get(provider.name, 0) + 1
-                if validation_failures[provider.name] >= 2:
+                if validation_failures[provider.name] >= 3:
                     dead.add(provider.name)
             except Exception as exc:
                 last_error = exc

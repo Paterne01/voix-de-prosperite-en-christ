@@ -621,6 +621,13 @@ class ContentGenerator:
                     "annoncé dans le titre égale exactement le nombre de points. "
                     "Aucun élément interdit ci-dessus."
                 )
+                if "verse_reference" in avoid:
+                    text += (
+                        "\nIMPORTANT : ta référence biblique est déjà utilisée par un post "
+                        "récent. Choisis impérativement un verset TOTALEMENT différent "
+                        "(autre livre ET autre chapitre) : aucun des versets listés dans "
+                        "« Éléments interdits 90 jours » ne doit être répété."
+                    )
             return text
 
         def normalize(data: dict) -> Content:
