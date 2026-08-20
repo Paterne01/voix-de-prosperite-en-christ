@@ -160,20 +160,29 @@ def run_manual(config: dict, service, logger, dry_run: bool = False) -> dict:
 
     networks = config.get("manual_schedule", {}).get("networks") or []
     today = now.date().isoformat()
+    # Double vérification juste avant de consommer le fichier : si un autre
+    # processus a réservé le créneau entre-temps (pending créé), on s'arrête.
+    if not dry_run and service.database.manual_slot_done(today, slot):
+        _release_manual_lock()
+        return {"status": "idle", "message": f"Créneau {slot} déjà réservé — doublon évité."}
     source = files.pop(0)
     try:
         caption = generate_caption(source["name"])
     except Exception as exc:
         logger.warning("Génération de légende échouée pour %s : %s", source["name"], exc)
         caption = source["name"]
-    result = service.publish_manual(
-        media_path=str(_path(config, source["name"])),
-        caption=caption,
-        scheduled_for=f"{today}T{slot}",
-        dry_run=dry_run,
-        networks=networks or None,
-        filename=source["name"],
-    )
+    try:
+        result = service.publish_manual(
+            media_path=str(_path(config, source["name"])),
+            caption=caption,
+            scheduled_for=f"{today}T{slot}",
+            dry_run=dry_run,
+            networks=networks or None,
+            filename=source["name"],
+        )
+    finally:
+        if not dry_run:
+            _release_manual_lock()
     status = result.get("status")
     if not dry_run and status in ("published", "partial"):
         delete_pending(config, source["name"])

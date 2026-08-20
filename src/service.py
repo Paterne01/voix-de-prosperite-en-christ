@@ -23,10 +23,11 @@ FORMATS = ("video", "declaration")
 SHORT_DURATION = {"declaration": 22, "video": 60}
 
 # Durée au-delà de laquelle une vidéo importée manuellement est traitée comme
-# « vidéo longue » (upload /videos, non Reel). 80 s : les vidéos de 61-80 s
-# restent des Reels/Shorts, un peu au-dessus de la limite historique de 60 s
-# (Facebook/YouTube acceptent sans problème jusqu'à ~90 s).
-LONG_VIDEO_SECONDS = 80
+# « vidéo longue » (upload /videos, non Reel). 90 s : les vidéos de 61-90 s
+# restent des Reels/Shorts (Facebook Reels ≤90 s, YouTube Shorts ≤180 s) ;
+# seules les vidéos >90 s passent en vidéo classique. Le dossier pending
+# actuel contient des extraits de 64-86 s → tous deviennent des Reels.
+LONG_VIDEO_SECONDS = 90
 
 
 def _overlay_duration(text_content: str | None, default: int = 3) -> int:
@@ -532,8 +533,8 @@ class PublicationService:
             raise FileNotFoundError(f"Fichier introuvable : {media}")
         started = datetime.now(UTC)
 
-        # Durée de la vidéo importée : courte (<= 80 s) → Short/Reel publié via
-        # /video_reels ; longue (> 80 s) → vidéo classique publiée telle quelle.
+        # Durée de la vidéo importée : courte (<= 90 s) → Short/Reel publié via
+        # /video_reels ; longue (> 90 s) → vidéo classique publiée telle quelle.
         # L'information pilote aussi les métadonnées YouTube (vocabulaire Short).
         if kind == "image":
             is_long = False
@@ -625,13 +626,13 @@ class PublicationService:
                 video_path = self._build_video(media, self._find_audio("declaration"), format="declaration")
                 is_long = False
             elif is_long:
-                # Vidéo longue (> 80 s) → publiée telle quelle sur tous les réseaux.
+                # Vidéo longue (> 90 s) → publiée telle quelle sur tous les réseaux.
                 video_path = media
             else:
                 from .config import absolute_path as _abs
 
-                # Vidéo courte (<= 80 s) → recadrée en Short 9:16 (conserve
-                # jusqu'à 80 s : les enseignements importés durent 64-80 s).
+                # Vidéo courte (<= 90 s) → recadrée en Short 9:16 (conserve
+                # jusqu'à 90 s : les enseignements importés durent 64-86 s).
                 video_path = crop_to_short(
                     media, output_dir=_abs(self.config["paths"].get("videos", "Videos")),
                     max_duration=LONG_VIDEO_SECONDS,

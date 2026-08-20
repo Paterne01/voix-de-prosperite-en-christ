@@ -68,7 +68,7 @@ class FacebookReelsPublisher(BasePublisher):
     def publish_long(
         self, *, media_path: str, text: str, details: str = ""
     ) -> tuple[str, str | None, str | None]:
-        """Publie une vidéo LONGUE (> 80 s) sur la Page : upload direct via
+        """Publie une vidéo LONGUE (> 90 s) sur la Page : upload direct via
         /videos (le format Reels /video_reels est réservé aux vidéos courtes)."""
         retries = int(self.config.get("facebook", {}).get("max_retries", 3))
         video_path = Path(media_path)
