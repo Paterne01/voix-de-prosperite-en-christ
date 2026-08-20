@@ -58,6 +58,49 @@ def slot_due_now(config: dict, database, now: datetime | None = None) -> str | N
     return None
 
 
+def _acquire_manual_lock(timeout_s: int = 280) -> bool:
+    """Verrou fichier pour empêcher deux ticks manuels concurrents de publier
+    2 fichiers pour le même créneau (APScheduler toutes les 5 min + tâche
+    Windows toutes les 10 min dans la fenêtre 19:55-20:20). Le verrou expire
+    après `timeout_s` pour éviter un blocage permanent si un tick plante."""
+    from pathlib import Path
+    from src.config import absolute_path
+
+    try:
+        lock = absolute_path("Logs/manual.lock")
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        if lock.exists():
+            try:
+                age = time.time() - lock.stat().st_mtime
+            except OSError:
+                age = timeout_s + 1
+            if age < timeout_s:
+                return False
+            try:
+                lock.unlink()
+            except OSError:
+                pass
+        try:
+            lock.write_text(str(time.time()), encoding="utf-8")
+        except OSError:
+            return False
+        return True
+    except Exception:
+        return True
+
+
+def _release_manual_lock() -> None:
+    from pathlib import Path
+    from src.config import absolute_path
+
+    try:
+        lock = absolute_path("Logs/manual.lock")
+        if lock.exists():
+            lock.unlink()
+    except OSError:
+        pass
+
+
 def run_manual(config: dict, service, logger, dry_run: bool = False) -> dict:
     """Un tour du planificateur manuel : à l'heure d'un créneau, publie LE
     fichier le plus ancien en attente, puis passe au suivant au créneau suivant.
@@ -75,6 +118,11 @@ def run_manual(config: dict, service, logger, dry_run: bool = False) -> dict:
     from .manual import delete_pending, generate_caption, list_pending
 
     now = datetime.now()
+    # Garde-fou anti-concurrence : un seul tick manuel à la fois. Sans cela,
+    # APScheduler (5 min) + tâche Windows (10 min) dans la fenêtre 20:00
+    # publiaient 2 fichiers distincts pour le même créneau → 2 posts YouTube.
+    if not dry_run and not _acquire_manual_lock():
+        return {"status": "idle", "message": "Tick manuel déjà en cours (verrou actif)."}
     files = [
         f for f in list_pending(config)
         if f["kind"] in ("image", "video")

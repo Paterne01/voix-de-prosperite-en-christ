@@ -200,11 +200,18 @@ class HistoryDatabase:
         return [dict(row) for row in rows]
 
     def manual_slot_done(self, day: str, slot: str) -> bool:
-        """Vrai si un contenu manuel a déjà été publié pour ce créneau ce jour-là."""
+        """Vrai si un contenu manuel a déjà été réservé/publié pour ce créneau ce jour-là.
+
+        Inclut 'pending' (en cours de publication) pour éviter la race condition :
+        deux ticks concurrents (APScheduler toutes les 5 min + tâche Windows toutes
+        les 10 min) dans la fenêtre 19:55-20:20 réservaient chacun un fichier
+        différent pour le même créneau 20:00 → 2 posts YouTube/Facebook. Dès qu'un
+        tick crée l'enregistrement 'pending', le suivant doit s'arrêter.
+        """
         with self.connect() as conn:
             row = conn.execute(
                 "SELECT 1 FROM publications WHERE scheduled_for LIKE ? AND format = 'manual' "
-                "AND status IN ('published', 'partial') LIMIT 1",
+                "AND status IN ('published', 'partial', 'pending', 'in_progress') LIMIT 1",
                 (f"{day}T{slot}%",),
             ).fetchone()
         return row is not None
