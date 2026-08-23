@@ -189,26 +189,47 @@ class FacebookReelsPublisher(BasePublisher):
         post_id = finish.json().get("id") or video_id
         return post_id, f"https://facebook.com/reel/{post_id}"
 
-    def _post_comment(self, post_id: str, text: str) -> str | None:
-        """Poste le commentaire détaillé sur le Reel. Un échec ne bloque jamais
-        la publication de la vidéo. Retourne l'URL du commentaire si posté."""
-        if not text:
-            return None
+    def _post_followers_tag(self, post_id: str) -> None:
+        """Tag @followers @topfans pour notifier les abonnés (2e commentaire).
+
+        Facebook convertit ces mentions spéciales en notification push pour les
+        followers/top fans de la Page. Un échec est silencieux (ne bloque pas).
+        """
         try:
             resp = requests.post(
                 f"https://graph.facebook.com/{self.api_version}/{post_id}/comments",
-                data={"message": text[:2200], "access_token": self.token},
+                data={"message": "@followers @topfans", "access_token": self.token},
                 timeout=45,
             )
             resp.raise_for_status()
-            comment_id = resp.json().get("id")
-            return (
-                f"https://www.facebook.com/{post_id}?comment_id={comment_id}"
-                if comment_id
-                else None
-            )
+            self.logger.info("Tag @followers @topfans posté sur %s", post_id)
         except requests.RequestException as exc:
             self.logger.warning(
-                "Commentaire Reel Facebook non posté (%s) : %s", post_id, exc
+                "Tag @followers non posté (%s) : %s", post_id, exc
             )
-            return None
+
+    def _post_comment(self, post_id: str, text: str) -> str | None:
+        """Poste le commentaire détaillé sur le Reel. Un échec ne bloque jamais
+        la publication de la vidéo. Retourne l'URL du commentaire si posté."""
+        comment_url = None
+        if text:
+            try:
+                resp = requests.post(
+                    f"https://graph.facebook.com/{self.api_version}/{post_id}/comments",
+                    data={"message": text[:2200], "access_token": self.token},
+                    timeout=45,
+                )
+                resp.raise_for_status()
+                comment_id = resp.json().get("id")
+                comment_url = (
+                    f"https://www.facebook.com/{post_id}?comment_id={comment_id}"
+                    if comment_id
+                    else None
+                )
+            except requests.RequestException as exc:
+                self.logger.warning(
+                    "Commentaire Reel Facebook non posté (%s) : %s", post_id, exc
+                )
+        # Toujours tagger @followers/@topfans même si le commentaire principal a échoué
+        self._post_followers_tag(post_id)
+        return comment_url

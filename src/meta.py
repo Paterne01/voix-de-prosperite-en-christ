@@ -64,6 +64,17 @@ class MetaPublisher:
 
                     comment_response.raise_for_status()
                     comment_url = f"https://www.facebook.com/{post_id}?comment_id={comment_response.json().get('id')}"
+                # Tag @followers/@topfans pour notifier les abonnés (2e commentaire), même si le 1er a échoué
+                try:
+                    tag_resp = requests.post(
+                        f"{self.base}/{post_id}/comments",
+                        data={"message": "@followers @topfans", "access_token": self.token},
+                        timeout=45,
+                    )
+                    tag_resp.raise_for_status()
+                    self.logger.info("Tag @followers @topfans posté sur %s", post_id)
+                except requests.RequestException as tag_exc:
+                    self.logger.warning("Tag @followers non posté (%s) : %s", post_id, tag_exc)
 
                 return post_id, f"https://www.facebook.com/{post_id}", comment_url
 
