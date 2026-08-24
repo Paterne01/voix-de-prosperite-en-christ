@@ -18,16 +18,47 @@ body{font-family:Segoe UI,sans-serif;margin:0;background:#071a36;color:#ecf2fb;p
 
 </main>
 <script>
-const TYPES={{ types|tojson }};
+var TYPES={{ types|tojson }};
+window.TYPES = TYPES;
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 const IMG_RE=/\.(png|jpe?g|webp)$/i, VID_RE=/\.(mp4|mov|webm|avi)$/i;
 function mediaBadge(o){const f=o.file_path||'';if(!f)return '';if(IMG_RE.test(f))return '<span class="badge img">IMAGE</span>';if(VID_RE.test(f))return '<span class="badge vid">VIDÉO</span>';return ''}
-async function api(url,opts){const r=await fetch(url,opts);return r.json()}
-async function refresh(){const d=await api('/api/overlays');const by={};for(const t of TYPES)by[t]=[];for(const o of d.overlays||[])by[o.overlay_type].push(o);
+async function api(url,opts){
+  const r=await fetch(url,opts);
+  const t=await r.text();
+  if(!t) return {ok:false, error:'Réponse vide du serveur ('+r.status+')'};
+  try { return JSON.parse(t); } catch(e){ return {ok:false, error:'Réponse non-JSON: '+t.substring(0,200)}; }
+}
+async function refresh(){
+  try{
+    const d=await api('/api/overlays');
+    if(!d || !Array.isArray(d.overlays)){ throw new Error(d && d.error ? d.error : 'Réponse invalide'); }
+    const by={};for(const t of TYPES)by[t]=[];for(const o of d.overlays||[])by[o.overlay_type].push(o);
   for(const t of TYPES){const box=document.querySelector('[data-list="'+t+'"]');box.innerHTML='';const items=by[t];if(!items.length){box.innerHTML='<p class="off">Aucun overlay de ce type.</p>';continue}
   const hasActive=items.some(o=>o.active);
   box.innerHTML='<table><tr><th>Nom</th><th>Fichier / texte</th><th>Périmètre</th><th>État</th><th>Actions</th></tr>'+items.map(o=>'<tr class="'+(o.active?'active-row':'dim')+'"><td>'+esc(o.name)+(o.active?' <span class="badge on">EN COURS</span>':'')+'</td><td><small>'+(o.overlay_type==='image_text'?esc(o.text_content||''):mediaBadge(o)+esc((o.file_path||'').split(/[\\/]/).pop()||'—'))+'</small></td><td>'+esc(o.format_scope)+'</td><td class="'+(o.active?'ok':'off')+'">'+(o.active?'actif pour la période':'inactif')+'</td><td><button onclick="toggle('+o.id+','+(o.active?0:1)+')">'+(o.active?'Désactiver':'Activer (remplace)')+'</button> <button class="danger" onclick="remove('+o.id+')">Supprimer</button></td></tr>').join('')+(hasActive?'':'</table><p class="hint">Aucun overlay actif de ce type : il n\'est pas appliqué aux productions.</p>')}
-document.querySelectorAll('.ov-form').forEach(f=>f.onsubmit=async e=>{e.preventDefault();const msg=f.querySelector('.msg');const fd=new FormData(f);const d=await api('/api/overlays',{method:'POST',body:fd});if(!d.ok){msg.textContent='Erreur : '+(d.error||'');return}msg.textContent='✓';f.reset();hideDur(f);refresh()})
+  } catch(e){
+    const box=document.querySelector('[data-list="'+TYPES[0]+'"]');
+    if(box) box.innerHTML='<p class="off">Erreur chargement: '+esc(e.message)+'</p>';
+    console.error('refresh failed', e);
+  }
+}
+document.querySelectorAll('.ov-form').forEach(f=>f.onsubmit=async e=>{
+  e.preventDefault();
+  const msg=f.querySelector('.msg');
+  msg.textContent='Envoi...';
+  msg.style.color='#ffcf70';
+  const fd=new FormData(f);
+  try{
+    const d=await api('/api/overlays',{method:'POST',body:fd});
+    if(!d.ok){msg.textContent='Erreur : '+(d.error||'inconnue'); msg.style.color='#ff6b6b'; return;}
+    msg.textContent='✓ Enregistré (actif: '+(d.overlays? d.overlays.length : '?')+')'; msg.style.color='#79d98c';
+    f.reset();hideDur(f);
+    await refresh();
+  } catch(err){
+    msg.textContent='Erreur réseau: '+err.message; msg.style.color='#ff6b6b';
+  }
+})
 document.querySelectorAll('.io-form').forEach(f=>{const file=f.querySelector('input[type=file]');file.addEventListener('change',()=>{const name=(file.files[0]||{}).name||'';const isImg=IMG_RE.test(name);f.querySelector('.dur-field').hidden=!isImg})})
 function hideDur(f){const h=f.querySelector('.dur-field');if(h)h.hidden=true}
 async function toggle(id,active){const fd=new FormData();fd.append('active',active?'on':'');const d=await api('/api/overlays/'+id+'/toggle',{method:'POST',body:fd});location.reload()}
