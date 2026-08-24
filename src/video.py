@@ -198,17 +198,25 @@ def crop_to_short(
     source: str | Path,
     output_dir: str | Path | None = None,
     max_duration: int = SHORTS_MAX_SECONDS,
+    intro_path: str | Path | None = None,
+    outro_path: str | Path | None = None,
+    watermark_path: str | Path | None = None,
+    watermark_text: str | None = None,
+    intro_duration: int = 3,
+    outro_duration: int = 3,
 ) -> Path:
     """Recadre une vidéo manuelle en 9:16 (1080×1920) pour publication en Short.
 
     Utilisé par le Format C (fichiers importés) : la vidéo source est
     normalisée en vertical, bornée à max_duration secondes, avec sa piste
-    audio conservée. Retourne le chemin du fichier produit.
+    audio conservée, puis watermark + intro/outro sont appliqués comme pour
+    les Shorts générés (même pipeline ffmpeg). Retourne le chemin du fichier
+    produit.
 
-    `max_duration` par défaut à 80 s (LONG_VIDEO_SECONDS côté service) : les
-    Reels acceptent ~90 s, on garde donc jusqu'à 80 s de contenu au lieu de
-    tronquer à 60 s les enseignements importés (qui durent souvent 64-80 s).
-    Les vidéos GÉNÉRÉES restent bornées à 60 s via leur propre paramètre.
+    `max_duration` par défaut à 60 s mais l'appelant (service.publish_manual)
+    passe `LONG_VIDEO_SECONDS` (90 s) pour les enseignements importés qui
+    durent souvent 64-86 s. Les vidéos GÉNÉRÉES restent bornées à 60 s via
+    leur propre paramètre.
     """
     src = Path(source)
     if not src.exists():
@@ -218,7 +226,56 @@ def crop_to_short(
     output = output_dir_p / f"short_{src.stem}.mp4"
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    _normalize_clip(src, output, dur=float(max_duration) if max_duration else None)
+    # Phase 1 : normalisation 1080×1920 + watermark superposé
+    wm = _resolve_watermark(watermark_path, watermark_text)
+    if wm is not None:
+        # Normalise avec watermark via filter_complex
+        v_pad = _video_pad_chain("v0")
+        ch, prev = _wm_image_chain(1, "v0")
+        v_pad.append(ch)
+        chain = ";".join(v_pad)
+        src_str = str(src)
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", src_str,
+            "-i", str(wm),
+            "-filter_complex", chain,
+            "-map", f"[{prev}]",
+        ]
+        if _has_audio(src):
+            cmd += ["-map", "0:a", "-c:a", "aac", "-b:a", "128k"]
+        else:
+            cmd += ["-an"]
+        cmd += [
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
+            "-t", str(max_duration) if max_duration else "9999",
+            "-movflags", "+faststart",
+            str(output),
+        ]
+        _run(cmd)
+    else:
+        _normalize_clip(src, output, dur=float(max_duration) if max_duration else None)
+
+    # Phase 2 : intro/outro (images converties en clips ou vidéos telles quelles)
+    intro_piece, outro_piece, temp_clips = _intro_outro_pieces(
+        intro_path, outro_path, output_dir_p,
+        intro_duration=intro_duration, outro_duration=outro_duration,
+    )
+    pieces: list[tuple[str, Path]] = []
+    if intro_piece:
+        pieces.append(("intro", intro_piece))
+    pieces.append(("main", output))
+    if outro_piece:
+        pieces.append(("outro", outro_piece))
+    try:
+        if len(pieces) > 1:
+            _concat_pieces(pieces, output, max_duration=max_duration)
+    finally:
+        for clip in temp_clips:
+            try:
+                clip.unlink(missing_ok=True)
+            except OSError:
+                pass
     return output
 
 

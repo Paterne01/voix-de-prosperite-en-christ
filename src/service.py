@@ -631,11 +631,20 @@ class PublicationService:
             else:
                 from .config import absolute_path as _abs
 
-                # Vidéo courte (<= 90 s) → recadrée en Short 9:16 (conserve
-                # jusqu'à 90 s : les enseignements importés durent 64-86 s).
+                # Vidéo courte (<= 90 s) → recadrée en Short 9:16 avec overlays
+                # (intro/outro/watermark) comme les Shorts générés. Les
+                # enseignements importés durent 64-86 s → on conserve 90 s max.
+                intro = self._active_overlay_file("intro", "video")
+                outro = self._active_overlay_file("outro", "video")
+                watermark = self._active_overlay_file("watermark", "video")
+                intro_duration = _overlay_duration(self._active_overlay_text("intro", "video"), default=3)
+                outro_duration = _overlay_duration(self._active_overlay_text("outro", "video"), default=3)
                 video_path = crop_to_short(
                     media, output_dir=_abs(self.config["paths"].get("videos", "Videos")),
                     max_duration=LONG_VIDEO_SECONDS,
+                    intro_path=intro, outro_path=outro,
+                    watermark_path=watermark,
+                    intro_duration=intro_duration, outro_duration=outro_duration,
                 )
             created_media.append(video_path)
         except Exception as exc:
