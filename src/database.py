@@ -331,9 +331,13 @@ class HistoryDatabase:
             raise ValueError(f"Type d'overlay inconnu : {overlay_type}")
         with self.connect() as conn:
             if active:
+                # Exclusif par (type, périmètre) : on peut avoir un intro "all"
+                # et un intro "video" actifs en même temps, mais pas deux intros
+                # "video". Conserve les overlays avec leurs paramètres pour
+                # switcher selon la saison/circonstance.
                 conn.execute(
-                    "UPDATE overlays SET active = 0 WHERE overlay_type = ?",
-                    (overlay_type,),
+                    "UPDATE overlays SET active = 0 WHERE overlay_type = ? AND format_scope = ?",
+                    (overlay_type, format_scope),
                 )
             cursor = conn.execute(
                 "INSERT INTO overlays (name, overlay_type, file_path, text_content, active, format_scope, created_at) "
@@ -356,8 +360,8 @@ class HistoryDatabase:
         with self.connect() as conn:
             if active:
                 conn.execute(
-                    "UPDATE overlays SET active = 0 WHERE overlay_type = ? AND id != ?",
-                    (overlay_type, overlay_id),
+                    "UPDATE overlays SET active = 0 WHERE overlay_type = ? AND format_scope = ? AND id != ?",
+                    (overlay_type, format_scope, overlay_id),
                 )
             conn.execute(
                 "UPDATE overlays SET name = ?, overlay_type = ?, file_path = ?, "
@@ -373,18 +377,21 @@ class HistoryDatabase:
             conn.execute("DELETE FROM overlays WHERE id = ?", (overlay_id,))
 
     def set_overlay_active(self, overlay_id: int, active: bool) -> None:
-        """Active/désactive un overlay ; l'activation désactive les autres du
-        même type (un seul intro/outro/watermark/bandeau actif à la fois)."""
+        """Active/désactive un overlay ; l'activation est exclusive par
+        (type, périmètre) — ex. un intro "video" et un intro "declaration"
+        peuvent être actifs en même temps, mais pas deux intros "video".
+        Tous les overlays restent enregistrés avec leurs paramètres pour
+        switcher selon la saison/circonstance."""
         with self.connect() as conn:
             row = conn.execute(
-                "SELECT overlay_type FROM overlays WHERE id = ?", (overlay_id,)
+                "SELECT overlay_type, format_scope FROM overlays WHERE id = ?", (overlay_id,)
             ).fetchone()
             if row is None:
                 raise ValueError("Overlay introuvable.")
             if active:
                 conn.execute(
-                    "UPDATE overlays SET active = 0 WHERE overlay_type = ?",
-                    (row["overlay_type"],),
+                    "UPDATE overlays SET active = 0 WHERE overlay_type = ? AND format_scope = ?",
+                    (row["overlay_type"], row["format_scope"]),
                 )
                 conn.execute("UPDATE overlays SET active = 1 WHERE id = ?", (overlay_id,))
             else:
@@ -410,9 +417,26 @@ class HistoryDatabase:
         return [dict(row) for row in rows]
 
     def single_active_overlay(self, overlay_type: str, format: str | None = None) -> dict | None:
-        """Le plus récent overlay actif du type, ou None si aucun."""
+        """Le plus récent overlay actif du type, ou None si aucun.
+
+        Priorise le périmètre exact (ex. "video") sur "all" : si un intro
+        "video" et un intro "all" sont actifs, une génération format "video"
+        utilisera l'intro "video", tandis qu'une génération "declaration"
+        retombera sur "all". Tous les overlays restent enregistrés pour
+        switcher selon la période.
+        """
         rows = self.active_overlays(overlay_type=overlay_type, format=format)
-        return rows[-1] if rows else None
+        if not rows:
+            return None
+        if format:
+            exact = [r for r in rows if r["format_scope"] == format]
+            if exact:
+                return exact[-1]
+            # fallback : périmètre "all"
+            generic = [r for r in rows if r["format_scope"] == "all"]
+            if generic:
+                return generic[-1]
+        return rows[-1]
 
     def seed_default_formats(self, schedule: list[str]) -> None:
         """Crée les deux formats par défaut si la table est vide (migration)."""

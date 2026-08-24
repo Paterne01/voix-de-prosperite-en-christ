@@ -147,9 +147,15 @@ class ImageService:
             return draw.textlength(text, font=font)
 
     def _active_text_banner(self, format: str) -> dict | None:
-        """Overlay image_text actif pour ce format (le plus récent)."""
-        overlays = self._overlays(format, "image_text")
-        return overlays[-1] if overlays else None
+        """Overlay image_text actif pour ce format (priorise le périmètre exact)."""
+        try:
+            from .config import absolute_path
+            from .database import HistoryDatabase
+
+            db = HistoryDatabase(absolute_path(self.config["paths"]["database"]))
+            return db.single_active_overlay("image_text", format)
+        except Exception:
+            return None
 
     def _overlays(self, format: str, overlay_type: str) -> list[dict]:
         try:
