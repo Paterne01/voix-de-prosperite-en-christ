@@ -231,9 +231,7 @@ matériel garanti, une guérison ou un résultat automatique.
 FOCALISATION — UN pilier par texte. Le « Pilier obligatoire » fourni dans l'invite est le
 SEUL thème à développer, sans mélange.
 
-STYLE — français ORAL, direct, chaleureux, au « tu » (grand frère qui parle à des amis en
-Afrique francophone). Phrases courtes. La déclaration se raconte au PRÉSENT, comme une
-parole déjà en marche : « Je déclare que… », « Tu es… », « Aujourd'hui il se passe ceci… ».
+STYLE — français ORAL, ultra-direct, percutant, au « tu ». Phrases très courtes, max 5 LIGNES au total (35-45 mots). Chaque mot doit frapper : bannis le remplissage, les formules creuses. Au PRÉSENT, comme une parole déjà en marche : « Je déclare… », « Tu es… », « Aujourd'hui… ».
 
 OUVERTURE VARIÉE — ne commence jamais deux posts de la même façon. Alterne volontairement :
 parfois « Je déclare… », parfois « Aujourd'hui… », parfois une question qui accroche le
@@ -242,18 +240,7 @@ L'ouverture doit TOUCHER une réalité que le lecteur vit (honte financière, co
 peur de l'échec, prières sans réponse, jugement des proches, travail sans résultat visible)
 puis basculer en déclaration positive. Ne nomme JAMAIS le type d'ouverture choisi.
 
-CONTENU — « declaration » : le corps du texte, 2 à 4 phrases, 40 mots max. Il doit être
-affirmatif, responsable, et inspirer action ET foi. Termine par un verset cité avec sa
-référence exacte (ex. « Ésaïe 19:1 » — jamais sans la référence, jamais inventée au format
-illisible). Le champ « closure » : une seule phrase courte (~15 mots) qui « clôture » le
-texte en déclarant sur TOUT l'être du lecteur (état spirituel, décisions, relations,
-finances, santé intérieure, projets, générosité) — reformulée à chaque post, jamais une
-phrase figée, jamais de liste ni de « !!! ». Le champ « cta » : UNE phrase courte et
-humaine (~8-12 mots), au « tu », qui invite à PARTAGER le message (ex. « Partage ça à
-quelqu'un qui en a besoin 🙏 », « Envoie ça à un frère ou une sœur aujourd'hui ❤️ »,
-« Tague quelqu'un que Dieu est en train de relever »). Le CTA est affiché sur l'image :
-il doit être différent à chaque post — vérifie les « éléments interdits » fournis et
-n'écris jamais le même CTA que les posts récents.
+CONTENU — « declaration » : le corps du texte, 2 à 4 phrases, 35-45 mots, MAX 5 LIGNES VISUELLES. Direct, percutant, au présent, sans remplissage. Chaque phrase doit frapper : pas de formule vague, pas de répétition. Termine par un verset cité avec sa référence exacte (ex. « Ésaïe 19:1 » — jamais sans la référence). Le champ « closure » : une seule phrase courte (~12-15 mots) qui « clôture » sur TOUT l'être (spirituel, décisions, relations, finances, santé, projets) — toujours reformulée, jamais figée, jamais de « !!! ». Le champ « cta » : UNE phrase très courte et humaine (~8-12 mots), au « tu », qui invite à PARTAGER (ex. « Partage à quelqu'un qui en a besoin 🙏 »). Vérifie les « éléments interdits » et n'écris jamais le même CTA.
 
 STYLE — PAS de commentaire long ni de liste. PAS de tournures robots : « il est essentiel
 de », « n'oublions pas que », « en conclusion », « il convient de », « n'hésite pas à ».
@@ -433,8 +420,11 @@ class DeclarationGenerator:
     def _validate(self, content: Declaration, exclusions: dict[str, list[str]]) -> None:
         if content.pillar not in PILLARS:
             raise ValueError("Pilier inconnu pour la déclaration")
-        if len(content.declaration.split()) > 55:
-            raise ValueError("Déclaration trop longue")
+        if len(content.declaration.split()) > 45:
+            raise ValueError("Déclaration trop longue (max 5 lignes / 45 mots)")
+        # Max 5 lignes visuelles ≈ 5 phrases
+        if len([s for s in re.split(r"[.!?]+", content.declaration) if s.strip()]) > 5:
+            raise ValueError("Déclaration trop longue (max 5 phrases)")
         if not content.closure:
             raise ValueError("Déclaration sans phrase de clôture")
         if not content.cta:

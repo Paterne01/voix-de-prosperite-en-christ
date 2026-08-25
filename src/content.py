@@ -484,6 +484,9 @@ et humain. COHÉRENCE IMPÉRATIVE : si le titre annonce un nombre (« 5 pratique
 EXACTEMENT ce même nombre. 3 à 7 points, chaque point avec une application concrète
 qui commence par « Chez toi, ... » (jamais « il faut » ni « vous devez »).
 
+EFFET WOW — CHAQUE POINT DOIT ÊTRE INÉDIT ET PERCUTANT. Bannis les conseils génériques
+(« prie plus », « travaille dur », « sois patient »). Chaque point doit contenir AU MOINS UN de ces éléments inattendus : un chiffre précis, un exemple concret d'Afrique francophone (marché, famille, église, business), une erreur courante à éviter, ou une astuce contre-intuitive. Le lecteur doit se dire « je n'avais jamais vu ça comme ça ». Si ton point pourrait s'appliquer à n'importe quel post, il est trop général : recommence avec un angle neuf.
+
 COMMENTAIRE DÉTAILLÉ — il est publié tel quel en commentaire : il doit se lire comme
 un vrai message de grand frère sur les réseaux, PAS comme une dissertation. Points
 courts et directs, phrases qui parlent au « tu », aucune tournure scolaire du type
@@ -609,15 +612,17 @@ class ContentGenerator:
                 f"{system_prompt}\nPilier obligatoire : {pillar}.\n"
                 f"Type d'accroche IMPOSÉ pour le champ \"hook\" : « {hook_label} » "
                 f"(clé : {hook_key}). Construis le hook selon ce type, sans jamais le nommer.\n"
-                f"Éléments interdits 90 jours : {json.dumps(slim, ensure_ascii=False)}"
+                f"Éléments interdits 90 jours : {json.dumps(slim, ensure_ascii=False)}\n"
+                f"RAPPEL EFFET WOW : chaque point doit être une pépite inédite (chiffre précis, exemple concret d'Afrique francophone, erreur courante, astuce contre-intuitive) — jamais de conseil vague. "
+                f"Le pilier revient chaque semaine le même jour (ex. lundi = {pillar}) : le post du {pillar} de ce lundi ne doit JAMAIS ressembler à celui du lundi passé ni du prochain — change d'angle, de métaphore, d'histoire."
             )
             if avoid:
                 text += (
                     f"\nTon brouillon précédent a été rejeté pour ce motif : {avoid}.\n"
                     "Corrige-le maintenant : choisis un AUTRE verset, une accroche du même type "
                     "mais avec une formulation différente, un autre appel à l'action, et surtout "
-                    "des points (heading, body, application) RADICALEMENT différents — aucun "
-                    "heading ni aucune idée ne doit répéter un post récent. Vérifie que le nombre "
+                    "des points (heading, body, application) RADICALEMENT différents et PERCUTANTS — aucun "
+                    "heading ni aucune idée ne doit répéter un post récent, chaque point doit créer un déclic wow. Vérifie que le nombre "
                     "annoncé dans le titre égale exactement le nombre de points. "
                     "Aucun élément interdit ci-dessus."
                 )
@@ -665,14 +670,15 @@ class ContentGenerator:
             f"{system_prompt}\nPilier obligatoire : {pillar}.\n"
             f"Type d'accroche IMPOSÉ pour le champ \"hook\" : « {hook_label} » "
             f"(clé : {hook_key}). Construis le hook selon ce type, sans jamais le nommer.\n"
-            f"Éléments interdits 90 jours : {json.dumps({f: v[-20:] for f, v in exclusions.items() if f != 'comment_text'}, ensure_ascii=False)}"
+            f"Éléments interdits 90 jours : {json.dumps({f: v[-20:] for f, v in exclusions.items() if f != 'comment_text'}, ensure_ascii=False)}\n"
+            f"RAPPEL EFFET WOW : chaque point doit être inédit (chiffre, exemple concret) — jamais de conseil vague. "
+            f"Le pilier revient chaque semaine (ex. lundi = {pillar}) : change totalement d'angle pour ne jamais ressembler au même jour passé/prochain."
         )
         if avoid:
             prompt_text += (
                 f"\nTon brouillon précédent a été rejeté pour ce motif : {avoid}.\n"
                 "Corrige-le maintenant : choisis un AUTRE verset, une accroche du même type "
-                "mais avec une formulation différente, un autre appel à l'action, et vérifie "
-                "que le nombre annoncé dans le titre égale exactement le nombre de points. "
+                "mais avec une formulation différente, un autre appel à l'action, et surtout des points RADICALEMENT différents et percutants. "
                 "Aucun élément interdit ci-dessus."
             )
         data = hf_generate_json(system_prompt=system_prompt, prompt_text=prompt_text, token=token)
