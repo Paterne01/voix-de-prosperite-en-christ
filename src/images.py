@@ -320,7 +320,7 @@ class ImageService:
         return y + pill_h
 
     def _draw_logo(self, image: Image.Image) -> None:
-        """Logo réel en bas à gauche (80 px de haut, marges 40 px), alpha RGBA.
+        """Logo réel en haut à gauche (80 px de haut, marges 40 px), alpha RGBA.
 
         Plus AUCUNE écriture du nom en texte : si le logo est absent, on ne
         dessine rien plutôt que de réintroduire le texte.
@@ -335,7 +335,7 @@ class ImageService:
         ratio = 80 / logo.height
         logo = logo.resize((max(1, round(logo.width * ratio)), 80), Image.LANCZOS)
         base = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        base.paste(logo, (40, H - 80 - 40), logo)
+        base.paste(logo, (40, 40), logo)
         image.alpha_composite(base)
 
     # ── dessin d'un bloc de texte ajusté ─────────────────────────────

@@ -11,9 +11,9 @@ from .config import ROOT
 
 SHORTS_MAX_SECONDS = 60
 
-# Position du watermark (coin en bas à droite par défaut).
-_WM_X = "W-w-40"
-_WM_Y = "H-h-40"
+# Position du watermark (coin supérieur gauche — demandé).
+_WM_X = "40"
+_WM_Y = "40"
 
 # Taille cible du watermark PNG rendu depuis le texte.
 _WM_CANVAS = 560, 140
@@ -46,7 +46,7 @@ def build_short_video(
     """Build a YouTube Short (1080×1920, max 60 s) from a still image + audio.
 
     Phase 1 : image animée (boucle Ken Burns) + audio, watermark (image PNG ou
-    texte gravé via PIL) superposé en bas-droit. Phase 2 : intro/outro (clips
+    texte gravé via PIL) superposé en haut-gauche. Phase 2 : intro/outro (clips
     vidéo OU images, converties en clip fixe de intro_duration/outro_duration s)
     concaténés, l'ensemble restant borné à max_duration.
     """
@@ -428,7 +428,7 @@ def _video_pad_chain(label: str = "v0") -> list[str]:
 
 
 def _wm_image_chain(wm_input: int, prev_label: str) -> tuple[str, str]:
-    """Superpose une image watermark (entrée ffmpeg wm_input) en bas-droit.
+    """Superpose une image watermark (entrée ffmpeg wm_input) en haut-gauche.
 
     prev_label : label simple SANS crochets (ex. "v0"). Renvoie
     (chaîne de filtre, label simple de sortie).
