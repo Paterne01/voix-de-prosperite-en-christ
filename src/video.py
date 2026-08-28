@@ -194,6 +194,79 @@ def probe_duration(path: str | Path) -> float:
     return _probe_duration(Path(path))
 
 
+def _pick_format_c_music() -> Path | None:
+    """Musique de fond pour le Format C : un fichier pris au hasard dans
+    assets/format_c/audio (s'il y en a une, elle est utilisée pour toutes
+    les vidéos ; s'il y en a plusieurs, tirage aléatoire par vidéo)."""
+    import random
+
+    music_dir = ROOT / "assets" / "format_c" / "audio"
+    if not music_dir.is_dir():
+        return None
+    candidates = sorted(
+        p for p in music_dir.iterdir()
+        if p.is_file() and p.suffix.lower() in {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"}
+    )
+    if not candidates:
+        return None
+    return random.choice(candidates)
+
+
+def _mix_bg_music(video_path: Path, music_path: Path, max_duration: int | None = None) -> None:
+    """Mixe une musique de fond (bouclée, volume bas) avec l'audio existant.
+
+    Si la vidéo n'a pas d'audio, la musique devient la piste principale.
+    Le mix est à volume réduit (18%) pour ne pas couvrir la voix.
+    """
+    dur = _probe_duration(video_path) if max_duration is None else float(max_duration)
+    if dur <= 0:
+        dur = _probe_duration(video_path) or 60.0
+    tmp_out = video_path.with_suffix(".mix.mp4")
+    has_aud = _has_audio(video_path)
+    if has_aud:
+        # Mix voix (100%) + musique (18%), musique bouclée
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(video_path),
+            "-stream_loop", "1", "-i", str(music_path),
+            "-filter_complex",
+            "[0:a]volume=1.0[a0];[1:a]volume=0.18,aloop=loop=-1:size=2e+09,atrim=0:{:.2f}[a1];[a0][a1]amix=inputs=2:duration=shortest:dropout_transition=0:normalize=0[a]".format(dur),
+            "-map", "0:v",
+            "-map", "[a]",
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "128k",
+            "-t", f"{dur:.2f}",
+            "-movflags", "+faststart",
+            str(tmp_out),
+        ]
+    else:
+        # Pas d'audio d'origine : on met la musique seule
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(video_path),
+            "-stream_loop", "1", "-i", str(music_path),
+            "-map", "0:v",
+            "-map", "1:a",
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "128k",
+            "-t", f"{dur:.2f}",
+            "-shortest",
+            "-movflags", "+faststart",
+            str(tmp_out),
+        ]
+    try:
+        _run(cmd)
+        tmp_out.replace(video_path)
+    except Exception:
+        # Échec du mix : on garde la vidéo originale
+        if tmp_out.exists():
+            try:
+                tmp_out.unlink()
+            except OSError:
+                pass
+        raise
+
+
 def crop_to_short(
     source: str | Path,
     output_dir: str | Path | None = None,
@@ -204,6 +277,7 @@ def crop_to_short(
     watermark_text: str | None = None,
     intro_duration: int = 3,
     outro_duration: int = 3,
+    bg_music: str | Path | None = None,
 ) -> Path:
     """Recadre une vidéo manuelle en 9:16 (1080×1920) pour publication en Short.
 
@@ -276,6 +350,14 @@ def crop_to_short(
                 clip.unlink(missing_ok=True)
             except OSError:
                 pass
+    # Phase 3 : musique de fond Format C (optionnelle, mixée à 18%)
+    if bg_music:
+        try:
+            bg_path = Path(bg_music) if isinstance(bg_music, (str, Path)) else None
+            if bg_path and bg_path.is_file():
+                _mix_bg_music(output, bg_path, max_duration=None)
+        except Exception:
+            pass
     return output
 
 

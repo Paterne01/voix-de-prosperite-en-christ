@@ -18,6 +18,8 @@ FORMAT_KEYS = {
     "image_text": "format_b",
     "format_a": "format_a",
     "format_b": "format_b",
+    "manual": "format_c",
+    "format_c": "format_c",
 }
 
 # Les 7 points (piliers) de la prospérité chrétienne. Ce sont les THÈMES que
@@ -97,6 +99,8 @@ def load_config() -> dict[str, Any]:
             if isinstance(entry, dict):
                 for sub in entry.values():
                     (ROOT / sub).mkdir(parents=True, exist_ok=True)
+    # Format C (manuel) — dossier musique de fond
+    (ROOT / "assets/format_c/audio").mkdir(parents=True, exist_ok=True)
     (ROOT / config["paths"]["database"]).parent.mkdir(parents=True, exist_ok=True)
     return config
 

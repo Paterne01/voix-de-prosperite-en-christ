@@ -110,6 +110,10 @@
       "format_b": {
         "backgrounds": "assets/format_b/backgrounds",
         "audio": "assets/format_b/audio"
+      },
+      "format_c": {
+        "backgrounds": "assets/format_a/backgrounds",
+        "audio": "assets/format_c/audio"
       }
     }
   },

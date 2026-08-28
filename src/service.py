@@ -639,12 +639,24 @@ class PublicationService:
                 watermark = self._active_overlay_file("watermark", "video")
                 intro_duration = _overlay_duration(self._active_overlay_text("intro", "video"), default=3)
                 outro_duration = _overlay_duration(self._active_overlay_text("outro", "video"), default=3)
+                # Musique de fond Format C : dossier dédié assets/format_c/audio
+                # S'il y a une piste, elle est mixée pour toutes les vidéos ; s'il y en a
+                # plusieurs, tirage aléatoire par vidéo (18% volume, bouclée).
+                bg_music = None
+                try:
+                    from .video import _pick_format_c_music
+                    bg_music = _pick_format_c_music()
+                    if bg_music:
+                        self.logger.info("Musique Format C sélectionnée : %s", bg_music.name)
+                except Exception as exc:
+                    self.logger.warning("Sélection musique Format C échouée : %s", exc)
                 video_path = crop_to_short(
                     media, output_dir=_abs(self.config["paths"].get("videos", "Videos")),
                     max_duration=LONG_VIDEO_SECONDS,
                     intro_path=intro, outro_path=outro,
                     watermark_path=watermark,
                     intro_duration=intro_duration, outro_duration=outro_duration,
+                    bg_music=str(bg_music) if bg_music else None,
                 )
             created_media.append(video_path)
         except Exception as exc:

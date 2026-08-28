@@ -72,6 +72,48 @@ def _parse_networks(value: str) -> list[str]:
     return [name.strip() for name in value.split(",") if name.strip()]
 
 
+def _networks_from_request() -> list[str]:
+    """Réseaux cochés dans le formulaire (checkboxes facebook/youtube/tiktok).
+
+    Gère à la fois les checkboxes multiples (getlist) et l'ancien champ texte
+    comma-separated pour rétrocompatibilité.
+    """
+    # Checkboxes : plusieurs valeurs avec même nom "networks"
+    lst = request.form.getlist("networks")
+    if lst:
+        # getlist peut retourner ["facebook,youtube"] si l'ancien champ texte est encore là
+        out: list[str] = []
+        for item in lst:
+            out.extend(_parse_networks(item))
+        # dédoublonne en gardant l'ordre
+        seen: set[str] = set()
+        uniq: list[str] = []
+        for n in out:
+            low = n.lower()
+            if low not in seen:
+                seen.add(low)
+                uniq.append(low)
+        return uniq
+    return _parse_networks(request.form.get("networks", ""))
+
+
+def _manual_networks_from_request() -> list[str]:
+    lst = request.form.getlist("manual_networks")
+    if lst:
+        out: list[str] = []
+        for item in lst:
+            out.extend(_parse_networks(item))
+        seen: set[str] = set()
+        uniq: list[str] = []
+        for n in out:
+            low = n.lower()
+            if low not in seen:
+                seen.add(low)
+                uniq.append(low)
+        return uniq
+    return _parse_networks(request.form.get("manual_networks", "facebook,youtube,tiktok"))
+
+
 def _parse_schedule(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
@@ -249,7 +291,7 @@ def create_format():
     prompt = request.form.get("prompt", "").strip()
     output_type = request.form.get("output_type", "")
     schedule = _parse_schedule(request.form.get("schedule", ""))
-    networks = _parse_networks(request.form.get("networks", ""))
+    networks = _networks_from_request()
     if not name or output_type not in ("short_comment", "image_text"):
         return jsonify(ok=False, error="Nom et type de sortie requis."), 400
     if not schedule:
@@ -269,7 +311,7 @@ def update_format(format_id: int):
     prompt = request.form.get("prompt", "").strip()
     output_type = request.form.get("output_type", "")
     schedule = _parse_schedule(request.form.get("schedule", ""))
-    networks = _parse_networks(request.form.get("networks", ""))
+    networks = _networks_from_request()
     active = request.form.get("active") == "on"
     if not name or output_type not in ("short_comment", "image_text"):
         return jsonify(ok=False, error="Nom et type de sortie requis."), 400
@@ -432,7 +474,7 @@ def save_settings():
     except ValueError:
         manual["interval_hours"] = 4
     manual["start_hour"] = request.form.get("manual_start", "00:00").strip() or "00:00"
-    manual["networks"] = _parse_networks(request.form.get("manual_networks", "facebook,youtube,tiktok"))
+    manual["networks"] = _manual_networks_from_request() or ["facebook", "youtube", "tiktok"]
     config.setdefault("publishers", {"facebook": True, "youtube": False})
     config["publishers"]["facebook"] = request.form.get("publisher_facebook") == "on"
     config["publishers"]["youtube"] = request.form.get("publisher_youtube") == "on"
