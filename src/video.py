@@ -42,6 +42,7 @@ def build_short_video(
     watermark_text: str | None = None,
     intro_duration: int = 3,
     outro_duration: int = 3,
+    voice_path: str | Path | None = None,
 ) -> Path:
     """Build a YouTube Short (1080×1920, max 60 s) from a still image + audio.
 
@@ -61,23 +62,54 @@ def build_short_video(
     output.parent.mkdir(parents=True, exist_ok=True)
 
     wm = _resolve_watermark(watermark_path, watermark_text)
+    # Voice TTS (Format A) : si fourni, on mixe voix (1.0) + musique (0.15)
+    voice = Path(voice_path) if voice_path and Path(voice_path).exists() else None
 
     v_pad = _video_pad_chain("v0")
     seq, prev = 0, "v0"
     if wm is not None:
-        ch, prev = _wm_image_chain(2, prev)
+        # wm sera en input 2 si voice absent, 3 si voice présent -> on gère après
+        # Pour l'instant on ne sait pas l'index du wm, on le calculera dans la construction du cmd
+        pass
+    # Construction filter et inputs selon présence watermark + voice
+    # Inputs: 0=image, 1=audio, 2=wm?/voice?, 3=voice?
+    has_wm = wm is not None
+    has_voice = voice is not None
+    # Détermine les indices
+    wm_idx = 2 if has_wm else None
+    voice_idx = (3 if has_wm else 2) if has_voice else None
+
+    # Video chain
+    v_pad = _video_pad_chain("v0")
+    prev = "v0"
+    if has_wm:
+        ch, prev = _wm_image_chain(wm_idx, prev)
         v_pad.append(ch)
     chain = ";".join(v_pad)
+
+    # Audio chain
+    audio_filter = ""
+    audio_map = "1:a"
+    if has_voice:
+        # Musique en fond bouclée à 15%, voix à 100%, mix longest
+        audio_filter = f"[1:a]volume=0.15,aloop=loop=-1:size=2e+09[music];[{voice_idx}:a]volume=1.0[voice];[music][voice]amix=inputs=2:duration=longest:dropout_transition=0[audio]"
+        chain = chain + ";" + audio_filter if chain else audio_filter
+        audio_map = "[audio]"
 
     cmd = [
         "ffmpeg", "-y",
         "-loop", "1", "-i", str(image),
         "-i", str(audio),
-        *(["-i", str(wm)] if wm is not None else []),
+    ]
+    if has_wm:
+        cmd += ["-i", str(wm)]
+    if has_voice:
+        cmd += ["-i", str(voice)]
+    cmd += [
         "-filter_complex", chain,
         "-map", f"[{prev}]",
-        "-map", "1:a",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
+        "-map", audio_map,
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-threads", "4",
         "-c:a", "aac", "-b:a", "128k",
         "-t", str(max_duration),
         "-movflags", "+faststart",
@@ -119,6 +151,7 @@ def build_short_video_from_video(
     watermark_text: str | None = None,
     intro_duration: int = 3,
     outro_duration: int = 3,
+    voice_path: str | Path | None = None,
 ) -> Path:
     """Short 1080×1920 depuis un fond VIDÉO bouclé + calque texte (PNG transparent).
 
@@ -138,6 +171,12 @@ def build_short_video_from_video(
     output.parent.mkdir(parents=True, exist_ok=True)
 
     wm = _resolve_watermark(watermark_path, watermark_text)
+    voice = Path(voice_path) if voice_path and Path(voice_path).exists() else None
+    has_wm = wm is not None
+    has_voice = voice is not None
+    wm_idx = 3 if has_wm else None
+    # audio is input 2, voice would be 3+wm
+    voice_idx = (4 if has_wm else 3) if has_voice else None
 
     chain = (
         "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
@@ -146,20 +185,32 @@ def build_short_video_from_video(
         "[v0][ov]overlay=0:0:format=auto[vb]"
     )
     prev = "vb"
-    if wm is not None:
+    if has_wm:
         ch, prev = _wm_image_chain(3, prev)
         chain += ";" + ch
+
+    # Audio : musique 0.15 + voix 1.0 si voix présente
+    if has_voice:
+        chain += f";[2:a]volume=0.15,aloop=loop=-1:size=2e+09[music];[{voice_idx}:a]volume=1.0[voice];[music][voice]amix=inputs=2:duration=longest:dropout_transition=0[audio]"
+        audio_map = "[audio]"
+    else:
+        audio_map = "2:a"
 
     cmd = [
         "ffmpeg", "-y",
         "-stream_loop", "-1", "-i", str(bg),
         "-i", str(overlay),
         "-i", str(audio),
-        *(["-i", str(wm)] if wm is not None else []),
+    ]
+    if has_wm:
+        cmd += ["-i", str(wm)]
+    if has_voice:
+        cmd += ["-i", str(voice)]
+    cmd += [
         "-filter_complex", chain,
         "-map", f"[{prev}]",
-        "-map", "2:a",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
+        "-map", audio_map,
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-threads", "4",
         "-c:a", "aac", "-b:a", "128k",
         "-t", str(max_duration),
         "-movflags", "+faststart",

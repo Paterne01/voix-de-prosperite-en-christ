@@ -268,10 +268,39 @@ class PublicationService:
             self.database.update(publication_id, status="awaiting_image", error=msg)
             return {"id": publication_id, "status": "awaiting_image", "message": msg}
 
+        # TTS pour Format A (voix humaine) si activé
+        tts_voice_path = None
+        if not dry_run and format == "video" and self.config.get("tts_enabled"):
+            try:
+                from src.tts import build_narration_text, text_to_speech
+                import tempfile
+                # content peut être dataclass ou dict
+                cdict = content.to_dict() if hasattr(content, "to_dict") else dict(content) if isinstance(content, dict) else {}
+                # Fallback : construire dict minimal depuis les attributs
+                if not cdict.get("hook") and hasattr(content, "hook"):
+                    cdict = {
+                        "hook": getattr(content, "hook", ""),
+                        "points": getattr(content, "points", []),
+                        "truth": getattr(content, "truth", ""),
+                        "cta": getattr(content, "cta", ""),
+                        "verse_reference": getattr(content, "verse_reference", ""),
+                    }
+                narration = build_narration_text(cdict)
+                if narration and len(narration.strip()) > 10:
+                    tmp_voice = Path(tempfile.gettempdir()) / f"vp_tts_{publication_id}.mp3"
+                    tts_voice_path = text_to_speech(narration, str(tmp_voice))
+                    self.logger.info("TTS voix générée : %s (%d chars)", tts_voice_path, len(narration))
+                    created_media.append(Path(tts_voice_path))
+            except Exception as exc:
+                self.logger.warning("TTS échoué, on continue sans voix : %s", exc)
+                tts_voice_path = None
+
         networks_out: dict[str, dict] = {}
         created_media: list[Path] = [image_path] if image_path else []
         if overlay_path:
             created_media.append(overlay_path)
+        if tts_voice_path:
+            created_media.append(Path(tts_voice_path))
 
         def wants(name: str) -> bool:
             return allowed is None or name in allowed
@@ -290,6 +319,7 @@ class PublicationService:
                 image_path, networks_out, created_media, format=format,
                 background_video=bg_path if bg_kind == "video" else None,
                 overlay_path=overlay_path,
+                voice_path=None,
             )
             if video_path is None:
                 media_reason = networks_out.get("media", {}).get("reason", "vidéo indisponible")
@@ -311,6 +341,7 @@ class PublicationService:
                 image_path, networks_out, created_media, format=format,
                 background_video=bg_path if bg_kind == "video" else None,
                 overlay_path=overlay_path,
+                voice_path=tts_voice_path,
             )
             if video_path is None:
                 self.logger.warning("Aucun média vidéo disponible : saut Facebook Reels / YouTube")
@@ -399,6 +430,7 @@ class PublicationService:
     def _build_video_for_format(
         self, image_path: Path, networks: dict, created_media: list[Path],
         format: str = "video", background_video: str | None = None, overlay_path: Path | None = None,
+        voice_path: str | Path | None = None,
     ) -> Path | None:
         try:
             audio = self._find_audio(format)
@@ -414,8 +446,15 @@ class PublicationService:
         video_path = self._build_video(
             image_path, audio, format=format,
             background_video=background_video, overlay_path=overlay_path,
+            voice_path=voice_path,
         )
         created_media.append(video_path)
+        # Nettoyer la voix temporaire après utilisation
+        if voice_path and Path(voice_path).exists():
+            try:
+                Path(voice_path).unlink(missing_ok=True)
+            except OSError:
+                pass
         return video_path
 
     # ── Facebook — Reels (format vidéo) ──────────────────────────────
@@ -489,6 +528,7 @@ class PublicationService:
     def _build_video(
         self, image_path: Path, audio: Path, format: str = "video",
         background_video: str | None = None, overlay_path: Path | None = None,
+        voice_path: str | Path | None = None,
     ) -> Path:
         from .config import absolute_path
         from .video import build_short_video, build_short_video_from_video
@@ -506,11 +546,13 @@ class PublicationService:
                 output_dir=videos_dir, max_duration=max_duration,
                 intro_path=intro, outro_path=outro, watermark_path=watermark,
                 intro_duration=intro_duration, outro_duration=outro_duration,
+                voice_path=voice_path,
             )
         return build_short_video(
             image_path, audio, output_dir=videos_dir, max_duration=max_duration,
             intro_path=intro, outro_path=outro, watermark_path=watermark,
             intro_duration=intro_duration, outro_duration=outro_duration,
+            voice_path=voice_path,
         )
 
     def _active_overlay_file(self, overlay_type: str, format: str) -> str | None:

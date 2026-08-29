@@ -118,6 +118,22 @@ def _parse_schedule(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+@app.post("/api/config/tts")
+def config_tts():
+    config = load_config()
+    enabled = request.form.get("enabled") == "on" or request.form.get("enabled") == "true" or request.json and request.json.get("enabled")
+    # Support both form and JSON
+    if request.is_json:
+        enabled = bool(request.json.get("enabled"))
+    else:
+        enabled = request.form.get("enabled") in ("on", "true", "1")
+    config["tts_enabled"] = bool(enabled)
+    if request.form.get("voice") or (request.is_json and request.json.get("voice")):
+        config["tts_voice"] = request.form.get("voice") or request.json.get("voice")
+    save_config(config)
+    return jsonify(ok=True, tts_enabled=config["tts_enabled"])
+
+
 @app.get("/api/formats")
 def list_formats():
     return jsonify(formats=service().database.list_formats())
