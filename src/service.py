@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import random
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
@@ -28,6 +29,41 @@ SHORT_DURATION = {"declaration": 22, "video": 60}
 # seules les vidéos >90 s passent en vidéo classique. Le dossier pending
 # actuel contient des extraits de 64-86 s → tous deviennent des Reels.
 LONG_VIDEO_SECONDS = 90
+
+
+def _anti_bot_delay(logger) -> int:
+    """Délai aléatoire 5-25 min avant chaque publication (anti-shadowban)."""
+    delay = random.randint(300, 1500)
+    logger.info("Délai anti-bot : %s secondes", delay)
+    time.sleep(delay)
+    return delay
+
+
+def pick_random_time_in_window(window_str: str) -> datetime:
+    """Tire un moment aléatoire dans une plage 'HH:MM-HH:MM'."""
+    try:
+        start_s, end_s = window_str.split("-")
+        sh, sm = map(int, start_s.strip().split(":"))
+        eh, em = map(int, end_s.strip().split(":"))
+        start_min = sh * 60 + sm
+        end_min = eh * 60 + em
+        if end_min <= start_min:
+            end_min = start_min + 60
+        chosen = random.randint(start_min, end_min)
+        now = datetime.now()
+        return now.replace(hour=chosen // 60, minute=chosen % 60, second=0, microsecond=0)
+    except Exception:
+        return datetime.now()
+
+
+def _check_daily_limit(database, config: dict, logger) -> bool:
+    """Vérifie la limite journalière (max_posts_per_day). Retourne True si OK."""
+    limit = int(config.get("max_posts_per_day", 3))
+    count = database.count_today_published()
+    if count >= limit:
+        logger.warning("Limite journalière atteinte (%s/%s)", count, limit)
+        return False
+    return True
 
 
 def _overlay_duration(text_content: str | None, default: int = 3) -> int:
@@ -170,6 +206,12 @@ class PublicationService:
                 "id": None, "status": "skipped", "reason": "pro",
                 "format": format, "format_name": format_name,
             }
+        # Anti-shadowban : limite journalière
+        if not dry_run and not _check_daily_limit(self.database, self.config, self.logger):
+            return {
+                "id": None, "status": "skipped", "reason": "Limite journalière atteinte",
+                "format": format, "format_name": format_name,
+            }
         allowed = set(networks) if networks else None
         started = datetime.now(UTC)
         when = None
@@ -234,6 +276,11 @@ class PublicationService:
         def wants(name: str) -> bool:
             return allowed is None or name in allowed
 
+        # Délai anti-bot avant publications
+        delay = 0
+        if not dry_run and (wants("facebook") or wants("youtube") or wants("tiktok")):
+            delay = _anti_bot_delay(self.logger)
+            self.database.update(publication_id, publish_delay_seconds=delay, publish_attempted_at=datetime.now(UTC).isoformat())
         if format == "declaration":
             # Facebook : image + texte, sans commentaire de détail.
             if wants("facebook"):
@@ -252,8 +299,12 @@ class PublicationService:
                     networks_out.setdefault("tiktok", {"status": "skipped", "reason": media_reason})
             else:
                 if wants("youtube"):
+                    if not dry_run:
+                        _anti_bot_delay(self.logger)
                     self._publish_youtube(publication_id, video_path, content, networks_out)
                 if wants("tiktok"):
+                    if not dry_run:
+                        _anti_bot_delay(self.logger)
                     self._publish_tiktok(publication_id, video_path, content, networks_out)
         else:
             video_path = self._build_video_for_format(
@@ -272,8 +323,12 @@ class PublicationService:
                 if wants("facebook"):
                     self._publish_facebook_reels(publication_id, video_path, content, networks_out)
                 if wants("youtube"):
+                    if not dry_run:
+                        _anti_bot_delay(self.logger)
                     self._publish_youtube(publication_id, video_path, content, networks_out)
                 if wants("tiktok"):
+                    if not dry_run:
+                        _anti_bot_delay(self.logger)
                     self._publish_tiktok(publication_id, video_path, content, networks_out)
 
         overall = self._resolve_status(networks_out)
@@ -525,6 +580,8 @@ class PublicationService:
         from .manual import generate_youtube_metadata, kind_of
 
         self._dry_run = dry_run
+        if not dry_run and not _check_daily_limit(self.database, self.config, self.logger):
+            return {"id": publication_id, "status": "skipped", "reason": "Limite journalière atteinte", "format": format}
         media = Path(media_path)
         kind = kind_of(media.name)
         if kind not in ("image", "video"):
@@ -615,6 +672,14 @@ class PublicationService:
         def wants(name: str) -> bool:
             return allowed is None or name in allowed
 
+        # Anti-shadowban : délai + traçage
+        if wants("facebook") or wants("youtube") or wants("tiktok"):
+            d = _anti_bot_delay(self.logger)
+            try:
+                self.database.update(publication_id, publish_delay_seconds=d, publish_attempted_at=datetime.now(UTC).isoformat())
+            except Exception:
+                pass
+
         networks_out: dict[str, dict] = {}
         created_media: list[Path] = []
 
@@ -669,10 +734,12 @@ class PublicationService:
                 publication_id, video_path, content, networks_out, long_video=is_long
             )
         if wants("youtube"):
+            _anti_bot_delay(self.logger)
             self._publish_youtube(
                 publication_id, video_path, content, networks_out, long_video=is_long
             )
         if wants("tiktok"):
+            _anti_bot_delay(self.logger)
             self._publish_tiktok(publication_id, video_path, content, networks_out, long_video=is_long)
 
         overall = self._resolve_status(networks_out)

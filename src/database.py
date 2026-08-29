@@ -89,6 +89,14 @@ class HistoryDatabase:
                     conn.execute(f"ALTER TABLE publications ADD COLUMN {col} TEXT")
                 except sqlite3.OperationalError:
                     pass
+            for col, typ in (
+                ("publish_delay_seconds", "INTEGER"),
+                ("publish_attempted_at", "TEXT"),
+            ):
+                try:
+                    conn.execute(f"ALTER TABLE publications ADD COLUMN {col} {typ}")
+                except sqlite3.OperationalError:
+                    pass
 
     def recent_values(self, column: str, days: int = 90) -> set[str]:
         allowed = {"title", "topic", "verse_reference", "cta", "decor", "hook_type", "comment_text"}
@@ -133,7 +141,7 @@ class HistoryDatabase:
             "facebook_url", "youtube_video_id", "youtube_url", "youtube_comment_id", "youtube_comment_url",
             "tiktok_publish_id", "tiktok_url",
             "status", "error", "format", "background", "format_name", "source_filename",
-            "hook_type", "engagement_score",
+            "hook_type", "engagement_score", "publish_delay_seconds", "publish_attempted_at",
         ]
         values = [record.get(field) for field in fields]
         with self.connect() as conn:
@@ -145,7 +153,7 @@ class HistoryDatabase:
     def update(self, publication_id: int, **values: str | None) -> None:
         if not values:
             return
-        allowed = {"image_path", "facebook_post_id", "facebook_url", "youtube_video_id", "youtube_url", "youtube_comment_id", "youtube_comment_url", "tiktok_publish_id", "tiktok_url", "status", "error", "format", "background", "format_name", "source_filename"}
+        allowed = {"image_path", "facebook_post_id", "facebook_url", "youtube_video_id", "youtube_url", "youtube_comment_id", "youtube_comment_url", "tiktok_publish_id", "tiktok_url", "status", "error", "format", "background", "format_name", "source_filename", "publish_delay_seconds", "publish_attempted_at"}
         if set(values) - allowed:
             raise ValueError("Champ non autorisé")
         assignments = ", ".join(f"{key} = ?" for key in values)
@@ -230,6 +238,25 @@ class HistoryDatabase:
                 (filename,),
             ).fetchone()
         return row is not None
+
+    def count_today_published(self) -> int:
+        """Nombre de posts publiés aujourd'hui (tous formats)."""
+        today = datetime.now().date().isoformat()
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM publications WHERE substr(created_at,1,10)=? AND status IN ('published','partial')",
+                (today,),
+            ).fetchone()
+        return int(row[0]) if row else 0
+
+    def today_stats(self, limit: int = 3) -> dict:
+        today = datetime.now().date().isoformat()
+        with self.connect() as conn:
+            cnt = conn.execute(
+                "SELECT COUNT(*) FROM publications WHERE substr(created_at,1,10)=? AND status IN ('published','partial')",
+                (today,),
+            ).fetchone()[0]
+        return {"posts_today": int(cnt), "limit": int(limit)}
 
     # ── formats personnalisables ─────────────────────────────────────
 

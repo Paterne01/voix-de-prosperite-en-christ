@@ -520,6 +520,33 @@ def logs():
     return jsonify(text=text)
 
 
+# ── Anti-shadowban : stats du jour ─────────────────────────────────────
+
+@app.get("/api/today-stats")
+def today_stats():
+    config = load_config()
+    db = service().database
+    limit = int(config.get("max_posts_per_day", 3))
+    stats = db.today_stats(limit)
+    windows = config.get("schedule_windows") or []
+    # Prochaine fenêtre : la première non encore passée aujourd'hui
+    from datetime import datetime as _dt
+    now_min = _dt.now().hour * 60 + _dt.now().minute
+    next_win = None
+    for w in windows:
+        try:
+            _, end_s = w.split("-")
+            eh, em = map(int, end_s.strip().split(":"))
+            if eh * 60 + em >= now_min:
+                next_win = w
+                break
+        except Exception:
+            continue
+    if not next_win and windows:
+        next_win = windows[0]
+    return jsonify(posts_today=stats["posts_today"], limit=limit, next_window=next_win or "08:00")
+
+
 # ── Planification (APScheduler) ─────────────────────────────────────
 
 @app.get("/api/scheduler")
