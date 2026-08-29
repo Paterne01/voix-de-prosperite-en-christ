@@ -143,6 +143,9 @@ class HistoryDatabase:
             for col, typ in (
                 ("publish_delay_seconds", "INTEGER"),
                 ("publish_attempted_at", "TEXT"),
+                ("recycled_from", "INTEGER"),
+                ("views_total", "INTEGER"),
+                ("likes_total", "INTEGER"),
             ):
                 try:
                     conn.execute(f"ALTER TABLE publications ADD COLUMN {col} {typ}")
@@ -193,6 +196,7 @@ class HistoryDatabase:
             "tiktok_publish_id", "tiktok_url",
             "status", "error", "format", "background", "format_name", "source_filename",
             "hook_type", "engagement_score", "publish_delay_seconds", "publish_attempted_at",
+            "recycled_from", "views_total", "likes_total",
         ]
         values = [record.get(field) for field in fields]
         with self.connect() as conn:
@@ -204,7 +208,7 @@ class HistoryDatabase:
     def update(self, publication_id: int, **values: str | None) -> None:
         if not values:
             return
-        allowed = {"image_path", "facebook_post_id", "facebook_url", "youtube_video_id", "youtube_url", "youtube_comment_id", "youtube_comment_url", "tiktok_publish_id", "tiktok_url", "status", "error", "format", "background", "format_name", "source_filename", "publish_delay_seconds", "publish_attempted_at"}
+        allowed = {"image_path", "facebook_post_id", "facebook_url", "youtube_video_id", "youtube_url", "youtube_comment_id", "youtube_comment_url", "tiktok_publish_id", "tiktok_url", "status", "error", "format", "background", "format_name", "source_filename", "publish_delay_seconds", "publish_attempted_at", "recycled_from", "views_total", "likes_total"}
         if set(values) - allowed:
             raise ValueError("Champ non autorisé")
         assignments = ", ".join(f"{key} = ?" for key in values)

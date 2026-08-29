@@ -90,6 +90,32 @@ def run_window_job(config: dict, window: str) -> None:
         logger.exception("Fenêtre %s échouée : %s", window, exc)
 
 
+def run_learning_job(config: dict) -> None:
+    from src.learning import run_learning_cycle
+    from src.logging_setup import setup_logging
+    logger = setup_logging(config)
+    from src.config import absolute_path
+    db_path = str(absolute_path(config["paths"]["database"]))
+    try:
+        run_learning_cycle(db_path)
+        logger.info("Learning cycle terminé")
+    except Exception as exc:
+        logger.exception("Learning échoué : %s", exc)
+
+
+def run_recycling_job(config: dict) -> None:
+    from src.recycler import run_recycling
+    from src.logging_setup import setup_logging
+    logger = setup_logging(config)
+    from src.config import absolute_path
+    db_path = str(absolute_path(config["paths"]["database"]))
+    try:
+        n = run_recycling(db_path)
+        logger.info("Recyclage : %s posts planifiés", n)
+    except Exception as exc:
+        logger.exception("Recyclage échoué : %s", exc)
+
+
 def run_weekly_batch_job(config: dict) -> None:
     from src.batch_generator import generate_week_batch
     from src.logging_setup import setup_logging
@@ -200,6 +226,34 @@ class PostScheduler:
                 id="weekly_batch",
                 replace_existing=True,
                 name="Génération batch hebdomadaire",
+            )
+        except Exception:
+            pass
+        # Recyclage : tous les 14 jours
+        try:
+            self.scheduler.add_job(
+                run_recycling_job,
+                "interval",
+                days=14,
+                args=[self.config],
+                id="recycler",
+                replace_existing=True,
+                name="Recyclage top performers",
+            )
+        except Exception:
+            pass
+        # Learning : lundi 06h
+        try:
+            self.scheduler.add_job(
+                run_learning_job,
+                "cron",
+                day_of_week="mon",
+                hour=6,
+                minute=0,
+                args=[self.config],
+                id="learning_cycle",
+                replace_existing=True,
+                name="Learning loop",
             )
         except Exception:
             pass

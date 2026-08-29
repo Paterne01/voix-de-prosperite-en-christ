@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard Viral — Voix de Prospérité</title>
+<style>
+body{font-family:Segoe UI,sans-serif;margin:0;background:#0a0a0a;color:#f0f0f0;padding:20px}h1{color:#d9ae58;text-align:center}h2{color:#d9ae58;border-bottom:1px solid #333;padding-bottom:8px}.box{display:inline-block;width:30%;min-width:180px;margin:10px;padding:15px;background:#1a1a1a;border-radius:8px;text-align:center;vertical-align:top}.num{font-size:28px;font-weight:bold;color:#fff}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{padding:8px;border-bottom:1px solid #333;text-align:left;font-size:13px}th{background:#222;color:#d9ae58}tr.high{background:#0f3d1f}tr.mid{background:#3d2f0f}tr.low{background:#3d0f0f}.btn{display:inline-block;padding:8px 14px;margin:5px;background:#d9ae58;color:#000;border-radius:6px;text-decoration:none;font-weight:bold;border:0;cursor:pointer}
+</style></head><body>
+<h1>🔥 Viral Dashboard — Voix de Prospérité</h1>
+
+<h2>Chiffres clés</h2>
+<div style="text-align:center">
+  <div class="box"><div>Posts publiés</div><div class="num">{{total_posts}}</div></div>
+  <div class="box"><div>Vues moyennes</div><div class="num">{{avg_views}}</div></div>
+  <div class="box"><div>Likes moyens</div><div class="num">{{avg_likes}}</div></div>
+</div>
+
+<h2>Top 5 Angles</h2>
+<table><tr><th>Pilier</th><th>Angle</th><th>Score</th><th>Utilisations</th></tr>
+{% for a in top_angles %}
+<tr class="{% if a[2] > 0.6 %}high{% elif a[2] > 0.3 %}mid{% else %}low{% endif %}"><td>{{a[0]}}</td><td>{{a[1]}}</td><td>{{"%.3f"|format(a[2])}}</td><td>{{a[3]}}</td></tr>
+{% endfor %}
+{% if not top_angles %}<tr><td colspan="4" style="text-align:center;color:#888">Pas encore de données — publiez 5 posts minimum</td></tr>{% endif %}
+</table>
+
+<h2>Top 3 Posts</h2>
+<table><tr><th>Pilier</th><th>Émotion</th><th>Vues</th><th>Likes</th><th>Partages</th><th>Plateforme</th></tr>
+{% for p in top_posts %}
+<tr><td>{{p[0]}}</td><td>{{p[1]}}</td><td>{{p[2]}}</td><td>{{p[3]}}</td><td>{{p[4]}}</td><td>{{p[5]}}</td></tr>
+{% endfor %}
+{% if not top_posts %}<tr><td colspan="6" style="text-align:center;color:#888">Pas encore de données</td></tr>{% endif %}
+</table>
+
+<h2>Queue</h2>
+<p>{{queue_count}} posts en attente de publication</p>
+<button class="btn" onclick="fetch('/batch/generate-week',{method:'POST'}).then(r=>r.json()).then(d=>alert(JSON.stringify(d)))">Générer la semaine</button>
+
+<h2>Recommandations auto</h2>
+<p>✅ Meilleur horaire : {{best_hour[0] if best_hour else 'données insuffisantes'}}h</p>
+<p>✅ Émotion qui performe : {{best_emotion[0] if best_emotion and best_emotion[0] else 'données insuffisantes'}}</p>
+<p>⚠️ Réduire : titres '3 conseils', images abstraites</p>
+
+<p style="text-align:center;margin-top:20px"><a href="/" style="color:#d9ae58">← Retour</a> | <a href="/overlays" style="color:#d9ae58">Overlays</a></p>
+</body></html>

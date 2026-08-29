@@ -609,6 +609,38 @@ def batch_status():
         return jsonify(queue_count=0, next_scheduled=None, week_generated=False, error=str(e))
 
 
+@app.get("/dashboard")
+def dashboard():
+    import sqlite3
+    from src.config import absolute_path
+    db_path = str(absolute_path(load_config()["paths"]["database"]))
+    conn = sqlite3.connect(db_path)
+    try:
+        total_posts = conn.execute("SELECT COUNT(*) FROM publications WHERE status='published'").fetchone()[0]
+        avg_views = conn.execute("SELECT AVG(views_total) FROM publications WHERE views_total > 0").fetchone()[0] or 0
+        avg_likes = conn.execute("SELECT AVG(likes_total) FROM publications WHERE likes_total > 0").fetchone()[0] or 0
+        top_angles = conn.execute("SELECT pillar, angle_type, strength_score, usage_count FROM viral_angles ORDER BY strength_score DESC LIMIT 5").fetchall()
+        top_posts = conn.execute("SELECT pillar, angle_type, views_24h, likes_24h, shares_24h, platform FROM post_genome WHERE views_24h > 0 ORDER BY views_24h DESC LIMIT 3").fetchall()
+        queue_count = conn.execute("SELECT COUNT(*) FROM content_queue WHERE status='pending'").fetchone()[0]
+        best_hour = conn.execute("SELECT publish_hour, AVG(views_24h) as avg_v FROM post_genome WHERE views_24h > 0 GROUP BY publish_hour ORDER BY avg_v DESC LIMIT 1").fetchone()
+        best_emotion = None
+        try:
+            best_emotion = conn.execute("SELECT emotion, AVG(pg.views_24h) FROM post_genome pg JOIN viral_angles va ON va.angle_type=pg.angle_type WHERE pg.views_24h > 0 GROUP BY va.emotion ORDER BY 2 DESC LIMIT 1").fetchone()
+        except Exception:
+            pass
+        conn.close()
+        return render_template('dashboard.html',
+            total_posts=total_posts, avg_views=round(avg_views), avg_likes=round(avg_likes),
+            top_angles=top_angles, top_posts=top_posts, queue_count=queue_count,
+            best_hour=best_hour, best_emotion=best_emotion)
+    except Exception as e:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return f"Dashboard error: {e}", 500
+
+
 @app.post("/batch/generate-week")
 def batch_generate_week():
     from src.batch_generator import generate_week_batch
@@ -618,6 +650,49 @@ def batch_generate_week():
     try:
         n = generate_week_batch(db_path)
         return jsonify(ok=True, generated=n)
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+
+
+@app.get("/recycler/candidates")
+def recycler_candidates():
+    from src.recycler import find_recyclable
+    from src.config import absolute_path
+    config = load_config()
+    db_path = str(absolute_path(config["paths"]["database"]))
+    try:
+        rows = find_recyclable(db_path, min_views=30)
+        # Format as list of dicts
+        out = []
+        for r in rows:
+            out.append({"id": r[0], "title": r[4] if len(r) > 4 else "", "views": r[7] if len(r) > 7 else 0, "likes": r[8] if len(r) > 8 else 0})
+        return jsonify(candidates=out)
+    except Exception as exc:
+        return jsonify(candidates=[], error=str(exc))
+
+
+@app.post("/recycler/run")
+def recycler_run():
+    from src.recycler import run_recycling
+    from src.config import absolute_path
+    config = load_config()
+    db_path = str(absolute_path(config["paths"]["database"]))
+    try:
+        n = run_recycling(db_path)
+        return jsonify(ok=True, recycled=n)
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+
+
+@app.post("/learning/run")
+def learning_run():
+    from src.learning import run_learning_cycle
+    from src.config import absolute_path
+    config = load_config()
+    db_path = str(absolute_path(config["paths"]["database"]))
+    try:
+        run_learning_cycle(db_path)
+        return jsonify(ok=True)
     except Exception as exc:
         return jsonify(ok=False, error=str(exc)), 500
 
