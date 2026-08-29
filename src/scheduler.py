@@ -90,6 +90,19 @@ def run_window_job(config: dict, window: str) -> None:
         logger.exception("Fenêtre %s échouée : %s", window, exc)
 
 
+def run_weekly_batch_job(config: dict) -> None:
+    from src.batch_generator import generate_week_batch
+    from src.logging_setup import setup_logging
+    logger = setup_logging(config)
+    from src.config import absolute_path
+    db_path = str(absolute_path(config["paths"]["database"]))
+    try:
+        n = generate_week_batch(db_path)
+        logger.info("Batch hebdo généré : %s posts", n)
+    except Exception as exc:
+        logger.exception("Batch hebdo échoué : %s", exc)
+
+
 def run_manual_job(config: dict) -> None:
     from src.jobs import run_manual_tick
     from src.logging_setup import setup_logging
@@ -175,6 +188,21 @@ class PostScheduler:
             replace_existing=True,
             name="Publication manuelle (fichiers importés)",
         )
+        # Batch hebdomadaire : dimanche 21h
+        try:
+            self.scheduler.add_job(
+                run_weekly_batch_job,
+                "cron",
+                day_of_week="sun",
+                hour=21,
+                minute=0,
+                args=[self.config],
+                id="weekly_batch",
+                replace_existing=True,
+                name="Génération batch hebdomadaire",
+            )
+        except Exception:
+            pass
 
     def _add_format_jobs(self, fmt: dict) -> None:
         for slot in fmt["schedule"]:

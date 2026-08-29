@@ -369,6 +369,25 @@ class PublicationService:
         self.database.update(
             publication_id, status=overall, error=errors if errors else None
         )
+        # Post-genome : tracer pour le learning loop
+        try:
+            if overall in ("published", "partial"):
+                # Déterminer angle/émotion si disponible (sinon None)
+                angle_type = getattr(content, "angle_type", None) if hasattr(content, "angle_type") else None
+                # Si l'angle a été utilisé via pick_angle, il est loggé ; on tente de le récupérer
+                # Pour l'instant on stocke ce qu'on a
+                self.database.create_genome(
+                    post_id=publication_id,
+                    pillar=getattr(content, "pillar", ""),
+                    angle_type=angle_type,
+                    hook_type=getattr(content, "hook_type", ""),
+                    tts_enabled=int(bool(self.config.get("tts_enabled"))),
+                    video_duration_seconds=float(self.config.get("videos", {}).get("max_duration", 60)) if format=="video" else 0,
+                    publish_hour=datetime.now().hour,
+                    platform=",".join([k for k,v in networks_out.items() if v.get("status")=="ok"]) or "facebook",
+                )
+        except Exception:
+            pass
         self.logger.info(
             "Publication %s (%s) terminée : %s | %s",
             publication_id,
@@ -465,6 +484,11 @@ class PublicationService:
     ) -> None:
         if not self.config.get("publishers", {}).get("facebook", True):
             return
+        # Flag anti-shadowban : Reels vs ancien endpoint
+        use_reels = self.config.get("facebook", {}).get("use_reels_for_format_a", True)
+        if not use_reels and not long_video:
+            self.logger.info("Reels désactivé (flag) : publication via /videos pour %s", publication_id)
+            long_video = True
         try:
             from .publishers.facebook_reels import FacebookReelsPublisher
 

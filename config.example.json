@@ -121,7 +121,8 @@
   },
   "facebook": {
     "api_version": "v25.0",
-    "max_retries": 3
+    "max_retries": 3,
+    "use_reels_for_format_a": true
   },
   "youtube": {
     "privacy_status": "public",

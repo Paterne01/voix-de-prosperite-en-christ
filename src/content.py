@@ -599,8 +599,28 @@ class ContentGenerator:
         from .llm import generate_with_retry
 
         pillar = pillar or random.choice(PILLARS)
+        # Angle Engine : sélection pondérée selon les performances
+        angle = None
+        try:
+            from src.angle_engine import pick_angle
+            from src.config import absolute_path
+            db_path = str(absolute_path(self.config.get("paths", {}).get("database", "BaseDeDonnées/voix_prosperite.sqlite3")) if self.config else "BaseDeDonnées/voix_prosperite.sqlite3")
+            angle = pick_angle(db_path, pillar)
+        except Exception:
+            angle = None
         hook_key, hook_label = hook_type or random.choice(HOOK_TYPES)
         system_prompt = prompt or SYSTEM_PROMPT
+        # Si angle disponible, on l'injecte dans le prompt
+        angle_instruction = ""
+        if angle and angle.get("template"):
+            angle_instruction = (
+                f"\nANGLE NARRATIF IMPOSÉ : {angle['angle_type']}\n"
+                f"TEMPLATE D'ANGLE : {angle['template']}\n"
+                f"ÉMOTION DOMINANTE : {angle['emotion']}\n"
+                f"EXEMPLE SI DISPONIBLE : {angle.get('example','')}\n"
+                "NE PAS utiliser la structure \"X conseils / X points\". Construire le contenu autour de l'angle ci-dessus. "
+                "Générer 3 HOOKS candidats (champs hook_1, hook_2, hook_3)."
+            )
 
         def build_prompt(avoid: str | None = None) -> str:
             # Prompt allégé : on ne sérialise que les 20 derniers éléments par
@@ -609,7 +629,7 @@ class ContentGenerator:
             # gros, la ressemblance est contrôlée uniquement par _validate.
             slim = {f: v[-20:] for f, v in exclusions.items() if f != "comment_text"}
             text = (
-                f"{system_prompt}\nPilier obligatoire : {pillar}.\n"
+                f"{system_prompt}{angle_instruction}\nPilier obligatoire : {pillar}.\n"
                 f"Type d'accroche IMPOSÉ pour le champ \"hook\" : « {hook_label} » "
                 f"(clé : {hook_key}). Construis le hook selon ce type, sans jamais le nommer.\n"
                 f"Éléments interdits 90 jours : {json.dumps(slim, ensure_ascii=False)}\n"
@@ -636,12 +656,29 @@ class ContentGenerator:
             return text
 
         def normalize(data: dict) -> Content:
+            # Hook Engine : si 3 hooks fournis, scorer et choisir le meilleur
+            if angle and any(k in data for k in ("hook_1","hook_2","hook_3")):
+                try:
+                    from src.angle_engine import score_hooks_locally
+                    hooks = [data.get("hook_1",""), data.get("hook_2",""), data.get("hook_3","")]
+                    hooks = [h for h in hooks if h]
+                    if hooks:
+                        best = score_hooks_locally(hooks)
+                        data["hook"] = best
+                except Exception:
+                    pass
+            # Fallback si hook manquant mais hook_1 présent
+            if not data.get("hook") and data.get("hook_1"):
+                data["hook"] = data["hook_1"]
             data["hashtags"] = normalize_hashtags(
                 data.get("hashtags"),
                 fallback=_build_hashtags(data.get("pillar", pillar), data.get("topic", ""), random.Random(data.get("topic", ""))),
             )
             data["hook_type"] = hook_key
             data.setdefault("engagement_score", None)
+            # Nettoyer les champs hook_1/2/3 non attendus par le dataclass
+            for k in ("hook_1","hook_2","hook_3"):
+                data.pop(k, None)
             content = Content(**{field: data[field] for field in Content.__dataclass_fields__})
             self._validate(content, exclusions)
             return content
@@ -654,6 +691,16 @@ class ContentGenerator:
             do_json=True,
         )
         self._last_provider = provider_name
+        # Marquer l'angle comme utilisé
+        if angle and angle.get("id"):
+            try:
+                from src.angle_engine import mark_angle_used
+                from src.config import absolute_path
+                db_path = str(absolute_path(self.config.get("paths", {}).get("database", "BaseDeDonnées/voix_prosperite.sqlite3")) if self.config else "BaseDeDonnées/voix_prosperite.sqlite3")
+                mark_angle_used(db_path, angle["id"])
+                self.logger.info("Angle sélectionné : %s (score %.2f)", angle.get("angle_type"), angle.get("strength_score",0.5))
+            except Exception:
+                pass
         return normalize(data)
 
     def _huggingface(self, exclusions: dict[str, list[str]], avoid: str | None = None, prompt: str | None = None, hook_type: tuple[str, str] | None = None, pillar: str | None = None) -> Content:

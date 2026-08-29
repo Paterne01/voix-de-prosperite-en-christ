@@ -671,6 +671,14 @@ if __name__ == "__main__":
     @log_run("app.py (serveur Flask)")
     def _serve() -> None:
         configure_console()
+        # Initialise les angles viraux si vide
+        try:
+            from src.angle_engine import init_angles
+            from src.config import absolute_path
+            cfg = load_config()
+            init_angles(str(absolute_path(cfg.get("paths", {}).get("database", "BaseDeDonnées/voix_prosperite.sqlite3"))))
+        except Exception:
+            pass
         # Démarre APScheduler : créneaux des formats actifs + boucle manuelle.
         get_scheduler()
         app.run(host="127.0.0.1", port=8765, debug=False, use_reloader=False)

@@ -75,6 +75,57 @@ class HistoryDatabase:
                 )
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_overlays_type ON overlays(overlay_type, active)")
+            # Viral Engine — Angle Engine
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS viral_angles (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  pillar TEXT NOT NULL,
+                  angle_type TEXT NOT NULL,
+                  template TEXT NOT NULL,
+                  emotion TEXT NOT NULL,
+                  example TEXT,
+                  strength_score REAL DEFAULT 0.5,
+                  usage_count INTEGER DEFAULT 0,
+                  total_views INTEGER DEFAULT 0,
+                  total_likes INTEGER DEFAULT 0,
+                  total_comments INTEGER DEFAULT 0,
+                  last_used TEXT,
+                  created_at TEXT DEFAULT (datetime('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS post_genome (
+                  post_id INTEGER REFERENCES publications(id),
+                  pillar TEXT,
+                  angle_type TEXT,
+                  emotion TEXT,
+                  hook_type TEXT,
+                  first_frame_type TEXT,
+                  tts_enabled INTEGER,
+                  video_duration_seconds REAL,
+                  publish_hour INTEGER,
+                  platform TEXT,
+                  views_1h INTEGER DEFAULT 0,
+                  views_24h INTEGER DEFAULT 0,
+                  likes_24h INTEGER DEFAULT 0,
+                  shares_24h INTEGER DEFAULT 0,
+                  comments_24h INTEGER DEFAULT 0
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS content_queue (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  format TEXT NOT NULL,
+                  pillar TEXT NOT NULL,
+                  scheduled_for TEXT NOT NULL,
+                  content_json TEXT NOT NULL,
+                  media_path TEXT,
+                  status TEXT DEFAULT 'pending',
+                  platform TEXT NOT NULL,
+                  created_at TEXT DEFAULT (datetime('now')),
+                  published_at TEXT
+                )
+            """)
             try:
                 conn.execute("ALTER TABLE post_formats ADD COLUMN tier TEXT NOT NULL DEFAULT 'free'")
             except sqlite3.OperationalError:
@@ -257,6 +308,16 @@ class HistoryDatabase:
                 (today,),
             ).fetchone()[0]
         return {"posts_today": int(cnt), "limit": int(limit)}
+
+    def create_genome(self, post_id: int, pillar: str = "", angle_type: str | None = None, emotion: str | None = None, hook_type: str | None = None, first_frame_type: str | None = None, tts_enabled: int = 0, video_duration_seconds: float = 0, publish_hour: int = 0, platform: str = "") -> None:
+        try:
+            with self.connect() as conn:
+                conn.execute(
+                    "INSERT INTO post_genome (post_id, pillar, angle_type, emotion, hook_type, first_frame_type, tts_enabled, video_duration_seconds, publish_hour, platform) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (post_id, pillar, angle_type, emotion, hook_type, first_frame_type, tts_enabled, video_duration_seconds, publish_hour, platform),
+                )
+        except Exception:
+            pass
 
     # ── formats personnalisables ─────────────────────────────────────
 
