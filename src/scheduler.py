@@ -12,6 +12,7 @@ base, il faut donc éviter d'y emporter des objets lourds (service, logger).
 
 from __future__ import annotations
 
+import random
 from datetime import datetime
 
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -20,6 +21,23 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 PUBLISH_PREFIX = "format_"
 MANUAL_JOB_ID = "manual_tick"
+
+
+def pick_random_time_in_window(window_str: str) -> datetime:
+    """Tire un moment aléatoire dans une plage 'HH:MM-HH:MM'."""
+    try:
+        start_s, end_s = window_str.split("-")
+        sh, sm = map(int, start_s.strip().split(":"))
+        eh, em = map(int, end_s.strip().split(":"))
+        start_min = sh * 60 + sm
+        end_min = eh * 60 + em
+        if end_min <= start_min:
+            end_min = start_min + 60
+        chosen = random.randint(start_min, end_min)
+        now = datetime.now()
+        return now.replace(hour=chosen // 60, minute=chosen % 60, second=0, microsecond=0)
+    except Exception:
+        return datetime.now()
 
 
 # --- Cibles d'exécution (module-level, picklables) --------------------------------
@@ -44,6 +62,32 @@ def run_format_job(config: dict, fmt_id: int, slot: str) -> None:
     scheduled_for = f"{datetime.now().date().isoformat()}T{slot}"
     result = run_slot(config, service, fmt, slot, scheduled_for)
     logger.info("Job %s @ %s -> %s", fmt["name"], slot, result.get("status"))
+
+
+def run_window_job(config: dict, window: str) -> None:
+    """Job pour une fenêtre anti-shadowban : publie le format dû à l'heure tirée."""
+    from src.jobs import run_slot
+    from src.logging_setup import setup_logging
+    from src.service import PublicationService
+
+    logger = setup_logging(config)
+    service = PublicationService(config, logger)
+    # Détermine le format selon l'heure de la fenêtre (matin→video, midi→declaration, soir→video)
+    try:
+        start_s = window.split("-")[0].strip()
+        h = int(start_s.split(":")[0])
+        fmt_name = "video" if h < 12 or h >= 18 else "declaration"
+        # Trouve le format actif correspondant
+        for fmt in service.database.list_formats(only_active=True):
+            if service.normalize_format(fmt["output_type"]) == fmt_name:
+                slot = f"{h:02d}:00"  # slot fictif pour le log
+                scheduled_for = f"{datetime.now().date().isoformat()}T{window}"
+                result = run_slot(config, service, fmt, slot, scheduled_for)
+                logger.info("Fenêtre %s (%s) -> %s", window, fmt["name"], result.get("status"))
+                return
+        logger.warning("Aucun format trouvé pour fenêtre %s", window)
+    except Exception as exc:
+        logger.exception("Fenêtre %s échouée : %s", window, exc)
 
 
 def run_manual_job(config: dict) -> None:
@@ -98,10 +142,31 @@ class PostScheduler:
         from src.logging_setup import setup_logging
         from src.service import PublicationService
 
-        formats = PublicationService(self.config, setup_logging(self.config)).database.list_formats(only_active=True)
         self.scheduler.remove_all_jobs()
-        for fmt in formats:
-            self._add_format_jobs(fmt)
+        # Si schedule_windows est défini, on l'utilise (anti-shadowban) : un job
+        # par fenêtre à un moment aléatoire tiré au lancement.
+        windows = self.config.get("schedule_windows")
+        if isinstance(windows, list) and windows:
+            for idx, win in enumerate(windows):
+                try:
+                    dt = pick_random_time_in_window(win)
+                    self.scheduler.add_job(
+                        run_window_job,
+                        "cron",
+                        hour=dt.hour,
+                        minute=dt.minute,
+                        args=[self.config, win],
+                        id=f"window_{idx}_{win}",
+                        replace_existing=True,
+                        name=f"Fenêtre {win}",
+                    )
+                    self.logger.info("Fenêtre %s -> %02d:%02d", win, dt.hour, dt.minute)
+                except Exception as exc:
+                    self.logger.warning("Fenêtre invalide %r : %s", win, exc)
+        else:
+            formats = PublicationService(self.config, setup_logging(self.config)).database.list_formats(only_active=True)
+            for fmt in formats:
+                self._add_format_jobs(fmt)
         self.scheduler.add_job(
             run_manual_job,
             IntervalTrigger(minutes=5),
