@@ -594,6 +594,34 @@ def catch_up():
     return jsonify(result)
 
 
+@app.get("/batch-status")
+def batch_status():
+    from src.config import absolute_path
+    import sqlite3
+    db_path = absolute_path(load_config()["paths"]["database"])
+    try:
+        conn = sqlite3.connect(str(db_path))
+        cnt = conn.execute("SELECT COUNT(*) FROM content_queue WHERE status='pending'").fetchone()[0]
+        nxt = conn.execute("SELECT scheduled_for FROM content_queue WHERE status='pending' ORDER BY scheduled_for LIMIT 1").fetchone()
+        conn.close()
+        return jsonify(queue_count=cnt, next_scheduled=nxt[0] if nxt else None, week_generated=cnt>0)
+    except Exception as e:
+        return jsonify(queue_count=0, next_scheduled=None, week_generated=False, error=str(e))
+
+
+@app.post("/batch/generate-week")
+def batch_generate_week():
+    from src.batch_generator import generate_week_batch
+    from src.config import absolute_path
+    config = load_config()
+    db_path = str(absolute_path(config["paths"]["database"]))
+    try:
+        n = generate_week_batch(db_path)
+        return jsonify(ok=True, generated=n)
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+
+
 # ── Panneau de contrôle : reprise / annulation ──────────────────────
 
 @app.get("/api/pending")
