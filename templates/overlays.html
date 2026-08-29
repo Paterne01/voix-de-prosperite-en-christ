@@ -46,8 +46,10 @@ async function refresh(){
 document.querySelectorAll('.ov-form').forEach(f=>f.onsubmit=async e=>{
   e.preventDefault();
   const msg=f.querySelector('.msg');
+  const btn=f.querySelector('button');
   msg.textContent='Envoi...';
   msg.style.color='#ffcf70';
+  btn&&btn.classList.add('loading');btn&&(btn.disabled=true);
   const fd=new FormData(f);
   try{
     const d=await api('/api/overlays',{method:'POST',body:fd});
@@ -57,8 +59,14 @@ document.querySelectorAll('.ov-form').forEach(f=>f.onsubmit=async e=>{
     await refresh();
   } catch(err){
     msg.textContent='Erreur réseau: '+err.message; msg.style.color='#ff6b6b';
-  }
-})
+  } finally{btn&&btn.classList.remove('loading');btn&&(btn.disabled=false);}
+});
+document.addEventListener('click', e=>{
+  const b=e.target.closest('button');
+  if(!b||b.disabled) return;
+  b.classList.add('clicked');
+  setTimeout(()=>b.classList.remove('clicked'),180);
+});
 document.querySelectorAll('.io-form').forEach(f=>{const file=f.querySelector('input[type=file]');file.addEventListener('change',()=>{const name=(file.files[0]||{}).name||'';const isImg=IMG_RE.test(name);f.querySelector('.dur-field').hidden=!isImg})})
 function hideDur(f){const h=f.querySelector('.dur-field');if(h)h.hidden=true}
 async function toggle(id,active){const fd=new FormData();fd.append('active',active?'on':'');const d=await api('/api/overlays/'+id+'/toggle',{method:'POST',body:fd});location.reload()}

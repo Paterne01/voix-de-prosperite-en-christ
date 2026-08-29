@@ -2,7 +2,7 @@
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dashboard Viral — Voix de Prospérité</title>
 <style>
-body{font-family:Segoe UI,sans-serif;margin:0;background:#0a0a0a;color:#f0f0f0;padding:20px}h1{color:#d9ae58;text-align:center}h2{color:#d9ae58;border-bottom:1px solid #333;padding-bottom:8px}.box{display:inline-block;width:30%;min-width:180px;margin:10px;padding:15px;background:#1a1a1a;border-radius:8px;text-align:center;vertical-align:top}.num{font-size:28px;font-weight:bold;color:#fff}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{padding:8px;border-bottom:1px solid #333;text-align:left;font-size:13px}th{background:#222;color:#d9ae58}tr.high{background:#0f3d1f}tr.mid{background:#3d2f0f}tr.low{background:#3d0f0f}.btn{display:inline-block;padding:8px 14px;margin:5px;background:#d9ae58;color:#000;border-radius:6px;text-decoration:none;font-weight:bold;border:0;cursor:pointer}
+body{font-family:Segoe UI,sans-serif;margin:0;background:#0a0a0a;color:#f0f0f0;padding:20px}h1{color:#d9ae58;text-align:center}h2{color:#d9ae58;border-bottom:1px solid #333;padding-bottom:8px}.box{display:inline-block;width:30%;min-width:180px;margin:10px;padding:15px;background:#1a1a1a;border-radius:8px;text-align:center;vertical-align:top}.num{font-size:28px;font-weight:bold;color:#fff}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{padding:8px;border-bottom:1px solid #333;text-align:left;font-size:13px}th{background:#222;color:#d9ae58}tr.high{background:#0f3d1f}tr.mid{background:#3d2f0f}tr.low{background:#3d0f0f}.btn{display:inline-block;padding:8px 14px;margin:5px;background:#d9ae58;color:#000;border-radius:6px;text-decoration:none;font-weight:bold;border:0;cursor:pointer;transition:transform 0.12s,opacity 0.15s}.btn:active{transform:scale(0.96)}.btn.loading{opacity:0.65;pointer-events:none}.btn.loading::after{content:"";display:inline-block;width:12px;height:12px;border:2px solid #000;border-top-color:transparent;border-radius:50%;margin-left:8px;vertical-align:middle;animation:spin 0.6s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 </style></head><body>
 <h1>🔥 Viral Dashboard — Voix de Prospérité</h1>
 
@@ -39,4 +39,12 @@ body{font-family:Segoe UI,sans-serif;margin:0;background:#0a0a0a;color:#f0f0f0;p
 <p>⚠️ Réduire : titres '3 conseils', images abstraites</p>
 
 <p style="text-align:center;margin-top:20px"><a href="/" style="color:#d9ae58">← Retour</a> | <a href="/overlays" style="color:#d9ae58">Overlays</a></p>
+<script>
+document.addEventListener('click', e=>{
+  const b=e.target.closest('button');
+  if(!b||b.disabled) return;
+  b.classList.add('loading');
+  setTimeout(()=>b.classList.remove('loading'), 1200);
+});
+</script>
 </body></html>
