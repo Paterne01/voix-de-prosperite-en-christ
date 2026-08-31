@@ -20,8 +20,8 @@ _AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg"}
 # Formats pris en charge par le service.
 FORMATS = ("video", "declaration")
 
-# Durée cible des Shorts selon le format (déclaration = texte court : 20-25 s).
-SHORT_DURATION = {"declaration": 22, "video": 60}
+# Durée cible des Shorts : 60 s pour tous les formats (déclaration animée + format A).
+SHORT_DURATION = {"declaration": 60, "video": 60}
 
 # Durée au-delà de laquelle une vidéo importée manuellement est traitée comme
 # « vidéo longue » (upload /videos, non Reel). 90 s : les vidéos de 61-90 s
@@ -268,39 +268,39 @@ class PublicationService:
             self.database.update(publication_id, status="awaiting_image", error=msg)
             return {"id": publication_id, "status": "awaiting_image", "message": msg}
 
-        # TTS pour Format A (voix humaine) si activé
+        networks_out: dict[str, dict] = {}
+        created_media: list[Path] = [image_path] if image_path else []
+        if overlay_path:
+            created_media.append(overlay_path)
+
+        # TTS voix humaine (Format A et B) si activé
         tts_voice_path = None
-        if not dry_run and format == "video" and self.config.get("tts_enabled"):
+        if not dry_run and self.config.get("tts_enabled"):
             try:
                 from src.tts import build_narration_text, text_to_speech
                 import tempfile
-                # content peut être dataclass ou dict
                 cdict = content.to_dict() if hasattr(content, "to_dict") else dict(content) if isinstance(content, dict) else {}
-                # Fallback : construire dict minimal depuis les attributs
                 if not cdict.get("hook") and hasattr(content, "hook"):
                     cdict = {
                         "hook": getattr(content, "hook", ""),
                         "points": getattr(content, "points", []),
                         "truth": getattr(content, "truth", ""),
                         "cta": getattr(content, "cta", ""),
+                        "caption": getattr(content, "caption", ""),
                         "verse_reference": getattr(content, "verse_reference", ""),
                     }
+                # Pour Format B (déclaration) : la caption est la déclaration complète
+                if format == "declaration" and not cdict.get("hook"):
+                    cdict["hook"] = getattr(content, "caption", "") or getattr(content, "title", "")
                 narration = build_narration_text(cdict)
                 if narration and len(narration.strip()) > 10:
                     tmp_voice = Path(tempfile.gettempdir()) / f"vp_tts_{publication_id}.mp3"
                     tts_voice_path = text_to_speech(narration, str(tmp_voice))
-                    self.logger.info("TTS voix générée : %s (%d chars)", tts_voice_path, len(narration))
+                    self.logger.info("TTS voix générée (%s) : %s (%d chars)", format, tts_voice_path, len(narration))
                     created_media.append(Path(tts_voice_path))
             except Exception as exc:
                 self.logger.warning("TTS échoué, on continue sans voix : %s", exc)
                 tts_voice_path = None
-
-        networks_out: dict[str, dict] = {}
-        created_media: list[Path] = [image_path] if image_path else []
-        if overlay_path:
-            created_media.append(overlay_path)
-        if tts_voice_path:
-            created_media.append(Path(tts_voice_path))
 
         def wants(name: str) -> bool:
             return allowed is None or name in allowed
@@ -314,12 +314,12 @@ class PublicationService:
             # Facebook : image + texte, sans commentaire de détail.
             if wants("facebook"):
                 self._publish_facebook_image(publication_id, image_path, content, networks_out)
-            # YouTube / TikTok : une version Short (Ken Burns + audio format_b).
+            # YouTube / TikTok : une version Short (Ken Burns + audio format_b + voix TTS si activée).
             video_path = self._build_video_for_format(
                 image_path, networks_out, created_media, format=format,
                 background_video=bg_path if bg_kind == "video" else None,
                 overlay_path=overlay_path,
-                voice_path=None,
+                voice_path=tts_voice_path,
             )
             if video_path is None:
                 media_reason = networks_out.get("media", {}).get("reason", "vidéo indisponible")
