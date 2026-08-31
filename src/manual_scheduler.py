@@ -123,33 +123,29 @@ def run_manual(config: dict, service, logger, dry_run: bool = False) -> dict:
     # publiaient 2 fichiers distincts pour le même créneau → 2 posts YouTube.
     if not dry_run and not _acquire_manual_lock():
         return {"status": "idle", "message": "Tick manuel déjà en cours (verrou actif)."}
-    files = [
-        f for f in list_pending(config)
-        if f["kind"] in ("image", "video")
-    ]
-    if not files:
+    raw_files = [f for f in list_pending(config) if f["kind"] in ("image", "video")]
+    if not raw_files:
         return {"status": "idle", "message": "Aucun contenu en attente."}
 
-    # Anti-doublon : un fichier déjà publié avec succès (ou en cours de
-    # publication par un tour qui se chevauche) n'est JAMAIS republié.
-    already = [
-        f for f in files
-        if service.database.manual_source_published(f["name"])
-    ]
+    # Anti-doublon : un fichier déjà publié avec succès (ou en cours) n'est JAMAIS republié.
+    # On filtre et on nettoie, puis on revérifie l'existence (évite FileNotFound si suppression concurrente).
+    already = [f for f in raw_files if service.database.manual_source_published(f["name"])]
     for stale in already:
-        logger.warning(
-            "Fichier déjà publié %r ignoré (anti-doublon), nettoyage.", stale["name"]
-        )
+        logger.warning("Fichier déjà publié %r ignoré (anti-doublon), nettoyage.", stale["name"])
         delete_pending(config, stale["name"])
-    files = [f for f in files if f not in already]
+    files = [f for f in raw_files if f not in already and _path(config, f["name"]).exists()]
     if not files:
-        return {"status": "idle", "message": "Aucun contenu en attente."}
+        return {"status": "idle", "message": "Aucun contenu en attente (après dédoublonnage)."}
 
-    # On ne publie que des fichiers dont la copie est terminée (mtime > 60 s).
-    files = [
-        f for f in files
-        if (now.timestamp() - _mtime(config, f["name"])) > 60
-    ]
+    # On ne publie que des fichiers dont la copie est terminée (mtime > 60 s) et toujours présents.
+    filtered = []
+    for f in files:
+        try:
+            if (now.timestamp() - _mtime(config, f["name"])) > 60 and _path(config, f["name"]).exists():
+                filtered.append(f)
+        except OSError:
+            continue
+    files = filtered
     if not files:
         return {"status": "idle", "message": "Fichier(s) en cours de copie, nouvel essai au prochain tour."}
     files.sort(key=lambda f: _mtime(config, f["name"]))
@@ -160,20 +156,31 @@ def run_manual(config: dict, service, logger, dry_run: bool = False) -> dict:
 
     networks = config.get("manual_schedule", {}).get("networks") or []
     today = now.date().isoformat()
-    # Double vérification juste avant de consommer le fichier : si un autre
-    # processus a réservé le créneau entre-temps (pending créé), on s'arrête.
     if not dry_run and service.database.manual_slot_done(today, slot):
         _release_manual_lock()
         return {"status": "idle", "message": f"Créneau {slot} déjà réservé — doublon évité."}
-    source = files.pop(0)
+    # Prend le plus ancien fichier encore existant (boucle jusqu'à trouver un fichier valide)
+    source = None
+    while files:
+        cand = files.pop(0)
+        if _path(config, cand["name"]).exists():
+            source = cand
+            break
+        logger.warning("Fichier %r a disparu entre listage et publication, suivant.", cand["name"])
+    if source is None:
+        _release_manual_lock()
+        return {"status": "idle", "message": "Fichier en attente a disparu."}
     try:
         caption = generate_caption(source["name"])
     except Exception as exc:
         logger.warning("Génération de légende échouée pour %s : %s", source["name"], exc)
         caption = source["name"]
     try:
+        media_path = _path(config, source["name"])
+        if not media_path.exists():
+            raise FileNotFoundError(f"Fichier introuvable au moment de publier : {media_path}")
         result = service.publish_manual(
-            media_path=str(_path(config, source["name"])),
+            media_path=str(media_path),
             caption=caption,
             scheduled_for=f"{today}T{slot}",
             dry_run=dry_run,

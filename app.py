@@ -616,23 +616,42 @@ def dashboard():
     db_path = str(absolute_path(load_config()["paths"]["database"]))
     conn = sqlite3.connect(db_path)
     try:
-        total_posts = conn.execute("SELECT COUNT(*) FROM publications WHERE status='published'").fetchone()[0]
-        avg_views = conn.execute("SELECT AVG(views_total) FROM publications WHERE views_total > 0").fetchone()[0] or 0
-        avg_likes = conn.execute("SELECT AVG(likes_total) FROM publications WHERE likes_total > 0").fetchone()[0] or 0
+        total_posts = conn.execute("SELECT COUNT(*) FROM publications WHERE status IN ('published','partial')").fetchone()[0]
+        # Vues/likes : post_genome si rempli, sinon 0 (affichage fallback)
+        avg_views = conn.execute("SELECT AVG(views_24h) FROM post_genome WHERE views_24h > 0").fetchone()[0]
+        if not avg_views:
+            avg_views = conn.execute("SELECT AVG(views_total) FROM publications WHERE views_total > 0").fetchone()[0] or 0
+        avg_likes = conn.execute("SELECT AVG(likes_24h) FROM post_genome WHERE likes_24h > 0").fetchone()[0]
+        if not avg_likes:
+            avg_likes = conn.execute("SELECT AVG(likes_total) FROM publications WHERE likes_total > 0").fetchone()[0] or 0
         top_angles = conn.execute("SELECT pillar, angle_type, strength_score, usage_count FROM viral_angles ORDER BY strength_score DESC LIMIT 5").fetchall()
+        # Top posts : d'abord par vues, fallback sur les plus récents (même sans vues)
         top_posts = conn.execute("SELECT pillar, angle_type, views_24h, likes_24h, shares_24h, platform FROM post_genome WHERE views_24h > 0 ORDER BY views_24h DESC LIMIT 3").fetchall()
+        if not top_posts:
+            top_posts = conn.execute("SELECT pillar, hook_type, 0, 0, 0, platform FROM post_genome ORDER BY post_id DESC LIMIT 3").fetchall()
+        if not top_posts:
+            # Fallback ultime : publications récentes
+            rows = conn.execute("SELECT pillar, title, 0, 0, 0, format FROM publications WHERE status IN ('published','partial') ORDER BY id DESC LIMIT 3").fetchall()
+            top_posts = [(r[0], (r[1][:20] if r[1] else r[5]), 0, 0, 0, r[5]) for r in rows]
         queue_count = conn.execute("SELECT COUNT(*) FROM content_queue WHERE status='pending'").fetchone()[0]
+        pending_manual = conn.execute("SELECT COUNT(*) FROM publications WHERE format='manual' AND status IN ('published','partial') AND substr(created_at,1,10)=date('now')").fetchone()[0]
         best_hour = conn.execute("SELECT publish_hour, AVG(views_24h) as avg_v FROM post_genome WHERE views_24h > 0 GROUP BY publish_hour ORDER BY avg_v DESC LIMIT 1").fetchone()
+        if not best_hour:
+            best_hour = conn.execute("SELECT CAST(substr(scheduled_for,12,2) AS INTEGER) as h, COUNT(*) as c FROM publications WHERE scheduled_for IS NOT NULL GROUP BY h ORDER BY c DESC LIMIT 1").fetchone()
+            if best_hour:
+                best_hour = (best_hour[0], best_hour[1])
         best_emotion = None
         try:
             best_emotion = conn.execute("SELECT emotion, AVG(pg.views_24h) FROM post_genome pg JOIN viral_angles va ON va.angle_type=pg.angle_type WHERE pg.views_24h > 0 GROUP BY va.emotion ORDER BY 2 DESC LIMIT 1").fetchone()
+            if not best_emotion or not best_emotion[0]:
+                best_emotion = conn.execute("SELECT pillar, COUNT(*) FROM publications GROUP BY pillar ORDER BY 2 DESC LIMIT 1").fetchone()
         except Exception:
             pass
         conn.close()
         return render_template('dashboard.html',
-            total_posts=total_posts, avg_views=round(avg_views), avg_likes=round(avg_likes),
+            total_posts=total_posts, avg_views=round(avg_views or 0), avg_likes=round(avg_likes or 0),
             top_angles=top_angles, top_posts=top_posts, queue_count=queue_count,
-            best_hour=best_hour, best_emotion=best_emotion)
+            best_hour=best_hour, best_emotion=best_emotion, pending_manual=pending_manual)
     except Exception as e:
         try:
             conn.close()

@@ -139,6 +139,19 @@ def build_short_video(
     return output
 
 
+def _animated_overlay_filter(duration: int = 60) -> str:
+    """Filtre ffmpeg pour animer le calque texte : zoom lent + fade-in.
+
+    Le texte apparaît avec un fondu sur 0.8s, un léger zoom 1.0→1.04 et une
+    micro-translation verticale pour donner de la vie sans distraire.
+    """
+    return (
+        "scale=1080:1920,format=rgba,"
+        "zoompan=z='if(lte(zoom,1.0),1.0,min(zoom+0.0004,1.04))':d=1:s=1080x1920:fps=30,"
+        "format=rgba,fade=t=in:st=0:d=0.8:alpha=1"
+    )
+
+
 def build_short_video_from_video(
     background_video: str | Path,
     overlay_path: str | Path,
@@ -155,8 +168,8 @@ def build_short_video_from_video(
 ) -> Path:
     """Short 1080×1920 depuis un fond VIDÉO bouclé + calque texte (PNG transparent).
 
-    Idem build_short_video : gravure du watermark puis concat intro/outro
-    (vidéos ou images converties en clip fixe).
+    Le calque texte est désormais animé (zoom lent + fade-in) pour rendre la
+    vidéo plus vivante. Idem build_short_video : gravure du watermark puis concat intro/outro.
     """
     bg, overlay, audio = Path(background_video), Path(overlay_path), Path(audio_path)
     if not bg.exists():
@@ -175,14 +188,15 @@ def build_short_video_from_video(
     has_wm = wm is not None
     has_voice = voice is not None
     wm_idx = 3 if has_wm else None
-    # audio is input 2, voice would be 3+wm
     voice_idx = (4 if has_wm else 3) if has_voice else None
 
+    # Calque texte animé : zoom lent + fade-in (plus vivant que statique)
+    anim = _animated_overlay_filter(max_duration)
     chain = (
         "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,format=yuv420p[v0];"
-        "[1:v]scale=1080:1920,format=rgba[ov];"
-        "[v0][ov]overlay=0:0:format=auto[vb]"
+        f"[1:v]{anim}[ov];"
+        "[v0][ov]overlay=0:0:format=auto:shortest=1[vb]"
     )
     prev = "vb"
     if has_wm:
@@ -552,8 +566,19 @@ def _image_to_clip(
     return output_path
 
 
-def _video_pad_chain(label: str = "v0") -> list[str]:
-    """Normalise l'entrée vidéo 0 en 1080×1920 yuv420p."""
+def _video_pad_chain(label: str = "v0", animate: bool = True) -> list[str]:
+    """Normalise l'entrée 0 en 1080×1920 yuv420p, avec animation Ken Burns subtile.
+
+    Zoom lent 1.0→1.06 + léger panoramique pour éviter l'image figée ; plus
+    vivant pour les déclarations de 60s sans alourdir le rendu.
+    """
+    if animate:
+        return [
+            "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
+            "crop=1080:1920,scale=1080:1920:force_original_aspect_ratio=disable,"
+            "zoompan=z='min(zoom+0.0005,1.06)':d=1:s=1080x1920:fps=30,format=yuv420p"
+            f"[{label}]"
+        ]
     return [
         "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
         f"crop=1080:1920,format=yuv420p[{label}]"
