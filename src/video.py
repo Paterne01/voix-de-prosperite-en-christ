@@ -43,13 +43,16 @@ def build_short_video(
     intro_duration: int = 3,
     outro_duration: int = 3,
     voice_path: str | Path | None = None,
+    overlay_path: str | Path | None = None,
 ) -> Path:
-    """Build a YouTube Short (1080×1920, max 60 s) from a still image + audio.
+    """Short 1080×1920 depuis une image + audio, avec animations.
 
-    Phase 1 : image animée (boucle Ken Burns) + audio, watermark (image PNG ou
-    texte gravé via PIL) superposé en haut-gauche. Phase 2 : intro/outro (clips
-    vidéo OU images, converties en clip fixe de intro_duration/outro_duration s)
-    concaténés, l'ensemble restant borné à max_duration.
+    - Fond : Ken Burns varié (zoom-in / zoom-out / travelling, tiré au hasard).
+    - Texte (overlay PNG transparent, si fourni) : entrée par le bas (1.2s),
+      fondu 0.8s, puis flottement doux ±6px — bien plus vivant que le fixe.
+    - Barre de progression or en bas + fondus entrée/sortie.
+    - Audio : voix gTTS 100% + musique 15% mixées (longest).
+    Phase 2 : intro/outro concaténés, total borné à max_duration.
     """
     image, audio = Path(image_path), Path(audio_path)
     if not image.exists():
@@ -62,45 +65,53 @@ def build_short_video(
     output.parent.mkdir(parents=True, exist_ok=True)
 
     wm = _resolve_watermark(watermark_path, watermark_text)
-    # Voice TTS (Format A) : si fourni, on mixe voix (1.0) + musique (0.15)
     voice = Path(voice_path) if voice_path and Path(voice_path).exists() else None
+    overlay = Path(overlay_path) if overlay_path and Path(overlay_path).exists() else None
 
-    v_pad = _video_pad_chain("v0")
-    seq, prev = 0, "v0"
-    if wm is not None:
-        # wm sera en input 2 si voice absent, 3 si voice présent -> on gère après
-        # Pour l'instant on ne sait pas l'index du wm, on le calculera dans la construction du cmd
-        pass
-    # Construction filter et inputs selon présence watermark + voice
-    # Inputs: 0=image, 1=audio, 2=wm?/voice?, 3=voice?
+    # Inputs: 0=image, 1=audio, 2=overlay?, 3=wm?, 4/3/2=voice?
+    has_ov = overlay is not None
     has_wm = wm is not None
     has_voice = voice is not None
-    # Détermine les indices
-    wm_idx = 2 if has_wm else None
-    voice_idx = (3 if has_wm else 2) if has_voice else None
+    cursor = 2
+    ov_idx = cursor if has_ov else None
+    if has_ov:
+        cursor += 1
+    wm_idx = cursor if has_wm else None
+    if has_wm:
+        cursor += 1
+    voice_idx = cursor if has_voice else None
 
-    # Video chain
-    v_pad = _video_pad_chain("v0")
-    prev = "v0"
+    # Chaîne vidéo : fond Ken Burns varié
+    filters: list[str] = _video_pad_chain("vbg", animate=True, duration=int(max_duration))
+    prev = "vbg"
+    if has_ov:
+        filters.append(
+            f"[{ov_idx}:v]format=rgba,fade=t=in:st=0:d=0.8:alpha=1,scale=1080:1920[ov]"
+        )
+        filters.append(
+            f"[vbg][ov]overlay=0:y='{_text_enter_y()}':format=auto:shortest=1[vb]"
+        )
+        prev = "vb"
     if has_wm:
         ch, prev = _wm_image_chain(wm_idx, prev)
-        v_pad.append(ch)
-    chain = ";".join(v_pad)
+        filters.append(ch)
+    prof, prev = _progress_and_fades(prev, int(max_duration), "vout")
+    filters.append(prof)
+    chain = ";".join(filters)
 
-    # Audio chain
-    audio_filter = ""
     audio_map = "1:a"
     if has_voice:
-        # Musique en fond bouclée à 15%, voix à 100%, mix longest
         audio_filter = f"[1:a]volume=0.15,aloop=loop=-1:size=2e+09[music];[{voice_idx}:a]volume=1.0[voice];[music][voice]amix=inputs=2:duration=longest:dropout_transition=0[audio]"
-        chain = chain + ";" + audio_filter if chain else audio_filter
+        chain = chain + ";" + audio_filter
         audio_map = "[audio]"
 
     cmd = [
         "ffmpeg", "-y",
-        "-loop", "1", "-i", str(image),
+        "-loop", "1", "-framerate", "30", "-i", str(image),
         "-i", str(audio),
     ]
+    if has_ov:
+        cmd += ["-loop", "1", "-framerate", "30", "-i", str(overlay)]
     if has_wm:
         cmd += ["-i", str(wm)]
     if has_voice:
@@ -190,18 +201,19 @@ def build_short_video_from_video(
     wm_idx = 3 if has_wm else None
     voice_idx = (4 if has_wm else 3) if has_voice else None
 
-    # Calque texte animé : zoom lent + fade-in (plus vivant que statique)
-    anim = _animated_overlay_filter(max_duration)
+    # Calque texte animé : entrée par le bas + fondu + flottement doux.
     chain = (
         "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,format=yuv420p[v0];"
-        f"[1:v]{anim}[ov];"
-        "[v0][ov]overlay=0:0:format=auto:shortest=1[vb]"
+        "[1:v]format=rgba,fade=t=in:st=0:d=0.8:alpha=1,scale=1080:1920[ov];"
+        f"[v0][ov]overlay=0:y='{_text_enter_y()}':format=auto:shortest=1[vb]"
     )
     prev = "vb"
     if has_wm:
         ch, prev = _wm_image_chain(3, prev)
         chain += ";" + ch
+    prof, prev = _progress_and_fades(prev, int(max_duration), "vfin")
+    chain += ";" + prof
 
     # Audio : musique 0.15 + voix 1.0 si voix présente
     if has_voice:
@@ -366,10 +378,11 @@ def crop_to_short(
     output.parent.mkdir(parents=True, exist_ok=True)
 
     # Phase 1 : normalisation 1080×1920 + watermark superposé
+    # (vidéo réelle : PAS de Ken Burns, on garde le cadrage d'origine)
     wm = _resolve_watermark(watermark_path, watermark_text)
     if wm is not None:
         # Normalise avec watermark via filter_complex
-        v_pad = _video_pad_chain("v0")
+        v_pad = _video_pad_chain("v0", animate=False)
         ch, prev = _wm_image_chain(1, "v0")
         v_pad.append(ch)
         chain = ";".join(v_pad)
@@ -566,23 +579,57 @@ def _image_to_clip(
     return output_path
 
 
-def _video_pad_chain(label: str = "v0", animate: bool = True) -> list[str]:
-    """Normalise l'entrée 0 en 1080×1920 yuv420p, avec animation Ken Burns subtile.
+def _video_pad_chain(label: str = "v0", animate: bool = True, variant: str | None = None, duration: int = 60) -> list[str]:
+    """Normalise l'entrée 0 en 1080×1920 yuv420p, avec animation Ken Burns variée.
 
-    Zoom lent 1.0→1.06 + léger panoramique pour éviter l'image figée ; plus
-    vivant pour les déclarations de 60s sans alourdir le rendu.
+    4 variantes tirées au hasard par vidéo (jamais deux vidéos identiques) :
+    - zoom_in : zoom lent 1.0 → 1.10
+    - zoom_out : dézoom 1.10 → 1.0
+    - pan_left : travelling gauche→droite (zoom fixe 1.12)
+    - pan_right : travelling droite→gauche (zoom fixe 1.12)
     """
-    if animate:
+    if not animate:
         return [
             "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
-            "crop=1080:1920,scale=1080:1920:force_original_aspect_ratio=disable,"
-            "zoompan=z='min(zoom+0.0005,1.06)':d=1:s=1080x1920:fps=30,format=yuv420p"
-            f"[{label}]"
+            f"crop=1080:1920,format=yuv420p[{label}]"
         ]
-    return [
-        "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
-        f"crop=1080:1920,format=yuv420p[{label}]"
-    ]
+    import random as _rnd
+
+    if variant is None:
+        variant = _rnd.choice(["zoom_in", "zoom_out", "pan_left", "pan_right"])
+    total = max(1, int(duration) * 30)
+    base = (
+        "[0:v]scale=2160:3840,"
+        "crop=2160:3840,scale=2160:3840:force_original_aspect_ratio=disable,"
+    )
+    if variant == "zoom_out":
+        zp = f"zoompan=z='if(lte(on,1),1.10,max(zoom-0.0006,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30"
+    elif variant == "pan_left":
+        zp = f"zoompan=z='1.12':x='(iw-iw/zoom)*on/{total}':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30"
+    elif variant == "pan_right":
+        zp = f"zoompan=z='1.12':x='(iw-iw/zoom)*(1-on/{total})':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30"
+    else:  # zoom_in
+        zp = "zoompan=z='min(zoom+0.0006,1.10)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30"
+    return [base + zp + f",format=yuv420p[{label}]"]
+
+
+def _progress_and_fades(prev: str, duration: int, out_label: str = "vout") -> tuple[str, str]:
+    """Barre de progression or + fondus entrée/sortie. Renvoie (filtre, label)."""
+    dur = max(5, int(duration))
+    filt = (
+        f"[{prev}]"
+        "drawbox=x=0:y=ih-14:w=iw:h=14:color=black@0.45:t=fill,"
+        f"drawbox=x=0:y=ih-14:w='iw*t/{dur}':h=14:color=#d9ae58:t=fill,"
+        "fade=t=in:st=0:d=0.5,"
+        f"fade=t=out:st={dur - 1}:d=1"
+        f"[{out_label}]"
+    )
+    return filt, out_label
+
+
+def _text_enter_y() -> str:
+    """Position Y animée du calque texte : entrée par le bas (1.2s) puis flottement doux."""
+    return "if(lt(t,1.2),1920*(1-t/1.2),6*sin(2*PI*t/5))"
 
 
 def _wm_image_chain(wm_input: int, prev_label: str) -> tuple[str, str]:

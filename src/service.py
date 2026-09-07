@@ -182,8 +182,14 @@ class PublicationService:
             content.engagement_score = score
         bg_name, bg_path, bg_kind = pick_background(self.config, self.database, format)
         image_path = self.images.create(content, mode=mode, background=bg_path, format=format)
-        # Fond vidéo → on prépare un calque texte transparent à superposer dans ffmpeg.
-        overlay_path = self.images.overlay(content, format=format) if bg_kind == "video" else None
+        # Calque texte transparent TOUJOURS généré : pour fond vidéo (existant)
+        # ET pour fond image (nouveau) afin d'animer le texte séparément du fond
+        # dans la vidéo (slide-up + fade + flottement). L'image brandée reste
+        # la miniature / le post Facebook.
+        try:
+            overlay_path = self.images.overlay(content, format=format)
+        except Exception:
+            overlay_path = None
         return PreparedPost(content, image_path, bg_name, bg_kind, bg_path, overlay_path)
 
     # ── publish ──────────────────────────────────────────────────────
@@ -273,34 +279,45 @@ class PublicationService:
         if overlay_path:
             created_media.append(overlay_path)
 
-        # TTS voix humaine (Format A et B) si activé
+        # TTS gTTS : lit UNIQUEMENT le texte affiché à l'écran
+        # Format A : titre + accroche (jamais les points du commentaire).
+        # Format B : déclaration + clôture.
         tts_voice_path = None
+        tts_voice_duration = 0.0
         if not dry_run and self.config.get("tts_enabled"):
             try:
                 from src.tts import build_narration_text, text_to_speech
                 import tempfile
                 cdict = content.to_dict() if hasattr(content, "to_dict") else dict(content) if isinstance(content, dict) else {}
-                if not cdict.get("hook") and hasattr(content, "hook"):
-                    cdict = {
-                        "hook": getattr(content, "hook", ""),
-                        "points": getattr(content, "points", []),
-                        "truth": getattr(content, "truth", ""),
-                        "cta": getattr(content, "cta", ""),
-                        "caption": getattr(content, "caption", ""),
-                        "verse_reference": getattr(content, "verse_reference", ""),
-                    }
-                # Pour Format B (déclaration) : la caption est la déclaration complète
-                if format == "declaration" and not cdict.get("hook"):
-                    cdict["hook"] = getattr(content, "caption", "") or getattr(content, "title", "")
-                narration = build_narration_text(cdict)
+                # Complète depuis les attributs si to_dict incomplet
+                for key in ("title", "hook", "declaration", "closure", "caption"):
+                    if not cdict.get(key) and hasattr(content, key):
+                        val = getattr(content, key)
+                        if callable(val):
+                            try:
+                                val = val()
+                            except Exception:
+                                continue
+                        if val:
+                            cdict[key] = val
+                narration = build_narration_text(cdict, format=format)
                 if narration and len(narration.strip()) > 10:
                     tmp_voice = Path(tempfile.gettempdir()) / f"vp_tts_{publication_id}.mp3"
                     tts_voice_path = text_to_speech(narration, str(tmp_voice))
-                    self.logger.info("TTS voix générée (%s) : %s (%d chars)", format, tts_voice_path, len(narration))
+                    try:
+                        from .video import probe_duration
+                        tts_voice_duration = float(probe_duration(tts_voice_path) or 0.0)
+                    except Exception:
+                        tts_voice_duration = 0.0
+                    self.logger.info(
+                        "TTS gTTS (%s) : %s (%d chars, %.1fs) — texte écran uniquement",
+                        format, tts_voice_path, len(narration), tts_voice_duration,
+                    )
                     created_media.append(Path(tts_voice_path))
             except Exception as exc:
-                self.logger.warning("TTS échoué, on continue sans voix : %s", exc)
+                self.logger.warning("TTS gTTS échoué, on continue sans voix : %s", exc)
                 tts_voice_path = None
+                tts_voice_duration = 0.0
 
         def wants(name: str) -> bool:
             return allowed is None or name in allowed
@@ -314,12 +331,13 @@ class PublicationService:
             # Facebook : image + texte, sans commentaire de détail.
             if wants("facebook"):
                 self._publish_facebook_image(publication_id, image_path, content, networks_out)
-            # YouTube / TikTok : une version Short (Ken Burns + audio format_b + voix TTS si activée).
+            # YouTube / TikTok : fond propre + texte animé + voix gTTS (durée adaptée).
             video_path = self._build_video_for_format(
                 image_path, networks_out, created_media, format=format,
                 background_video=bg_path if bg_kind == "video" else None,
                 overlay_path=overlay_path,
                 voice_path=tts_voice_path,
+                clean_bg=bg_path if bg_kind != "video" else None,
             )
             if video_path is None:
                 media_reason = networks_out.get("media", {}).get("reason", "vidéo indisponible")
@@ -342,6 +360,7 @@ class PublicationService:
                 background_video=bg_path if bg_kind == "video" else None,
                 overlay_path=overlay_path,
                 voice_path=tts_voice_path,
+                clean_bg=bg_path if bg_kind != "video" else None,
             )
             if video_path is None:
                 self.logger.warning("Aucun média vidéo disponible : saut Facebook Reels / YouTube")
@@ -449,7 +468,7 @@ class PublicationService:
     def _build_video_for_format(
         self, image_path: Path, networks: dict, created_media: list[Path],
         format: str = "video", background_video: str | None = None, overlay_path: Path | None = None,
-        voice_path: str | Path | None = None,
+        voice_path: str | Path | None = None, clean_bg: str | Path | None = None,
     ) -> Path | None:
         try:
             audio = self._find_audio(format)
@@ -465,7 +484,7 @@ class PublicationService:
         video_path = self._build_video(
             image_path, audio, format=format,
             background_video=background_video, overlay_path=overlay_path,
-            voice_path=voice_path,
+            voice_path=voice_path, clean_bg=clean_bg,
         )
         created_media.append(video_path)
         # Nettoyer la voix temporaire après utilisation
@@ -552,10 +571,10 @@ class PublicationService:
     def _build_video(
         self, image_path: Path, audio: Path, format: str = "video",
         background_video: str | None = None, overlay_path: Path | None = None,
-        voice_path: str | Path | None = None,
+        voice_path: str | Path | None = None, clean_bg: str | Path | None = None,
     ) -> Path:
         from .config import absolute_path
-        from .video import build_short_video, build_short_video_from_video
+        from .video import build_short_video, build_short_video_from_video, probe_duration
 
         videos_dir = absolute_path(self.config["paths"].get("videos", "Videos"))
         max_duration = SHORT_DURATION.get(format, 60)
@@ -564,6 +583,22 @@ class PublicationService:
         watermark = self._active_overlay_file("watermark", format)
         intro_duration = _overlay_duration(self._active_overlay_text("intro", format), default=3)
         outro_duration = _overlay_duration(self._active_overlay_text("outro", format), default=3)
+        # Format B : la vidéo dure le temps de la voix off (+ intro/outro + marge).
+        # Évite la coupure avant la fin de la déclaration.
+        if format == "declaration" and voice_path:
+            try:
+                vd = float(probe_duration(voice_path) or 0.0)
+                if vd > 5:
+                    import math
+                    # voix + intro/outro + 2s de respiration, borné 15-90s (Reels ≤90s)
+                    max_duration = int(math.ceil(vd + intro_duration + outro_duration + 2))
+                    max_duration = max(15, min(90, max_duration))
+                    self.logger.info(
+                        "Durée déclaration adaptée à la voix : %.1fs -> vidéo %ds",
+                        vd, max_duration,
+                    )
+            except Exception as exc:
+                self.logger.warning("Durée voix illisible, durée 60s par défaut : %s", exc)
         if background_video and overlay_path:
             return build_short_video_from_video(
                 background_video, overlay_path, audio,
@@ -572,6 +607,23 @@ class PublicationService:
                 intro_duration=intro_duration, outro_duration=outro_duration,
                 voice_path=voice_path,
             )
+        # Fond IMAGE + calque texte : source propre (sans texte gravé) + texte animé.
+        # Si pas de fond propre dispo, on retombe sur l'image brandée (Ken Burns seul).
+        _img_exts = {".jpg", ".jpeg", ".png", ".webp"}
+        if overlay_path and clean_bg:
+            try:
+                cb = Path(clean_bg)
+                if cb.is_file() and cb.suffix.lower() in _img_exts and Path(str(overlay_path)).is_file():
+                    return build_short_video(
+                        cb, audio, output_dir=videos_dir, max_duration=max_duration,
+                        intro_path=intro, outro_path=outro, watermark_path=watermark,
+                        intro_duration=intro_duration, outro_duration=outro_duration,
+                        voice_path=voice_path, overlay_path=overlay_path,
+                    )
+            except Exception as exc:
+                self.logger.warning("Fond propre inutilisable, repli image brandée : %s", exc)
+        # Repli : image brandée seule (texte déjà gravé, pas de sur-couche
+        # pour éviter le doublon) + Ken Burns + barre de progression.
         return build_short_video(
             image_path, audio, output_dir=videos_dir, max_duration=max_duration,
             intro_path=intro, outro_path=outro, watermark_path=watermark,

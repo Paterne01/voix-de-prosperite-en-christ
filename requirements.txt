@@ -11,3 +11,5 @@ keyring>=25.0
 Pillow>=10.0
 requests>=2.31
 pytest>=8.0
+gTTS>=2.5
+edge-tts>=7.0
