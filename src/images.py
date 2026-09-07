@@ -194,12 +194,76 @@ class ImageService:
 
     def _brand(self, image: Image.Image, content, format: str = "video") -> Image.Image:
         image = image.convert("RGB").resize((W, H))
-        overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        od = ImageDraw.Draw(overlay)
-        od.rectangle((0, 0, W, H), fill=(0, 0, 0, 90))
-        image = Image.alpha_composite(image.convert("RGBA"), overlay)
+        image = image.convert("RGBA")
+        # Voile sombre uniforme (lisibilité) + dégradé ciblé + vignettage léger
+        veil = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        vd = ImageDraw.Draw(veil)
+        vd.rectangle((0, 0, W, H), fill=(0, 0, 0, 70))
+        image = Image.alpha_composite(image, veil)
+        image = self._apply_scrim(image, format)
+        image = self._apply_vignette(image)
         self._draw_branding(image, content, format)
         return image.convert("RGB")
+
+    @staticmethod
+    def _apply_scrim(image: Image.Image, format: str) -> Image.Image:
+        """Dégradé sombre derrière la zone de texte (miniature premium lisible)."""
+        import math
+
+        scrim = Image.new("L", (1, H), 0)
+        px = scrim.load()
+        is_b = FORMAT_KEYS.get(format, "format_a") == "format_b"
+        for y in range(H):
+            t = y / H
+            if is_b:
+                # Bande centrale : fort au milieu, doux aux bords
+                center = abs(t - 0.5) * 2  # 0 centre -> 1 bords
+                a = max(0, int(150 * (1 - center * 1.15)))
+            else:
+                # Haut : fort en haut, fondu vers 65% (zone titre/accroche)
+                a = max(0, int(150 * (1 - t / 0.65))) if t < 0.65 else 0
+            px[0, y] = a
+        black = Image.new("RGBA", (W, H), (0, 0, 0, 255))
+        black.putalpha(scrim.resize((W, H)))
+        return Image.alpha_composite(image, black)
+
+    @staticmethod
+    def _apply_vignette(image: Image.Image, strength: int = 55) -> Image.Image:
+        """Assombrit légèrement les bords (focus centre, rendu premium)."""
+        import math
+
+        mask = Image.new("L", (W, H), 0)
+        px = mask.load()
+        cx, cy = W / 2, H / 2
+        maxd = math.hypot(cx, cy)
+        for y in range(0, H, 4):
+            for x in range(0, W, 4):
+                d = math.hypot(x - cx, y - cy) / maxd
+                a = max(0, int(strength * (d ** 2.2)))
+                for dy in range(4):
+                    for dx in range(4):
+                        if x + dx < W and y + dy < H:
+                            px[x + dx, y + dy] = a
+        black = Image.new("RGBA", (W, H), (0, 0, 0, 255))
+        black.putalpha(mask)
+        return Image.alpha_composite(image, black)
+
+    @staticmethod
+    def _draw_text_pretty(draw: ImageDraw.ImageDraw, xy, text: str, font, fill,
+                           stroke_width: int = 2, shadow: bool = True) -> None:
+        """Texte miniature : contour noir + ombre portée + remplissage (clicable)."""
+        x, y = xy
+        if shadow:
+            try:
+                draw.text((x + 3, y + 3), text, font=font, fill=(0, 0, 0, 200),
+                          stroke_width=stroke_width, stroke_fill=(0, 0, 0, 200))
+            except TypeError:
+                draw.text((x + 3, y + 3), text, font=font, fill=(0, 0, 0, 200))
+        try:
+            draw.text((x, y), text, font=font, fill=fill,
+                      stroke_width=stroke_width, stroke_fill=(10, 10, 10, 230))
+        except TypeError:
+            draw.text((x, y), text, font=font, fill=fill)
 
     def _draw_branding(self, image: Image.Image, content, format: str = "video") -> None:
         """Dessine titre + accroche + pastille CTA + logo sur `image` (RGBA).
@@ -216,22 +280,29 @@ class ImageService:
         self._draw_logo(image)
 
     def _draw_branding_top(self, draw: ImageDraw.ImageDraw, content) -> None:
-        """Format A : habillage historique (titre en haut, à 300 px)."""
+        """Format A : accroche miniature (eyebrow + titre + hook + pastille)."""
+        # Eyebrow doré : contexte + incitation au clic
+        try:
+            eb_font = _font(30, bold=True)
+            draw.text((93, 233), "✨ VOIX DE PROSPÉRITÉ", font=eb_font, fill=(217, 174, 88, 255),
+                      stroke_width=1, stroke_fill=(10, 10, 10, 230))
+        except TypeError:
+            draw.text((90, 230), "✨ VOIX DE PROSPÉRITÉ", font=_font(30, bold=True), fill="#d9ae58")
         cursor_y = self._draw_fitted(
             draw, content.title, x=90, y=300, box_width=900, box_height=540,
-            bold=True, max_font=92, min_font=40, fill="#f7ead0",
+            bold=True, max_font=96, min_font=42, fill="#f7ead0",
         )
 
-        # Accroche — suit la fin réelle du titre.
+        # Accroche — suit la fin réelle du titre, avec flèche Flutter.
         if content.hook:
+            hook_txt = content.hook if content.hook[:2] in ("👉", "🔥", "❓") else f"👉 {content.hook}"
             cursor_y = self._draw_fitted(
-                draw, content.hook, x=90, y=cursor_y + 40, box_width=900, box_height=400,
-                bold=False, max_font=56, min_font=28, fill="#cfd9ea",
+                draw, hook_txt, x=90, y=cursor_y + 40, box_width=900, box_height=400,
+                bold=False, max_font=58, min_font=30, fill="#cfd9ea",
             )
 
-        # Pastille — Format A : « Détails en commentaire » (le CTA du Format B
-        # est géré dans _draw_branding_centered).
-        pill_text = COMMENT_PILL
+        # Pastille — Format A : « Détails en commentaire » + 👇
+        pill_text = f"👇 {COMMENT_PILL}"
         if pill_text:
             self._draw_pill(draw, pill_text, y=cursor_y + 40)
 
@@ -251,6 +322,16 @@ class ImageService:
                 break
             blocks = self._fit_blocks(draw, content, scale=0.97 * available / total)
         total = min(self._blocks_height(blocks), available)
+
+        # Carte sombre arrondie + liseré or derrière le bloc (contraste miniature)
+        card_top = MID_BAND_TOP - 24
+        card_bottom = MID_BAND_TOP + max(total, 200) + 24
+        try:
+            draw.rounded_rectangle((48, card_top, W - 48, card_bottom),
+                                   radius=28, fill=(7, 26, 54, 205),
+                                   outline=(217, 174, 88, 255), width=3)
+        except (TypeError, AttributeError):
+            draw.rectangle((48, card_top, W - 48, card_bottom), fill=(7, 26, 54, 205))
 
         cursor_y = MID_BAND_TOP + max(0, (available - total) // 2)
 
@@ -310,12 +391,22 @@ class ImageService:
 
     @staticmethod
     def _draw_pill_from(draw: ImageDraw.ImageDraw, fitted: FittedText, *, y: int) -> int:
-        """Dessine une pastille déjà ajustée et renvoie son bas."""
+        """Pastille CTA premium : ombre portée + fond or + texte marine (clic)."""
         pill_h = ImageService._pill_height(fitted)
-        draw.rounded_rectangle((90, y, 990, y + pill_h), radius=18, fill="#b68a37")
+        # Ombre portée
+        try:
+            draw.rounded_rectangle((94, y + 5, 994, y + pill_h + 5), radius=18, fill=(0, 0, 0, 160))
+            draw.rounded_rectangle((90, y, 990, y + pill_h), radius=18, fill="#d9ae58")
+        except (TypeError, AttributeError):
+            draw.rectangle((94, y + 5, 994, y + pill_h + 5), fill=(0, 0, 0, 160))
+            draw.rectangle((90, y, 990, y + pill_h), fill="#d9ae58")
         ty = y + (pill_h - fitted.line_height * len(fitted.lines)) // 2
         for line in fitted.lines:
-            draw.text((120, ty), line, font=fitted.font, fill="#071a36")
+            try:
+                draw.text((120, ty), line, font=fitted.font, fill="#071a36",
+                          stroke_width=1, stroke_fill=(255, 255, 255, 90))
+            except TypeError:
+                draw.text((120, ty), line, font=fitted.font, fill="#071a36")
             ty += fitted.line_height
         return y + pill_h
 
@@ -345,8 +436,7 @@ class ImageService:
         draw, text: str, *, x: int, y: int, box_width: int, box_height: int,
         bold: bool, max_font: int, min_font: int, fill,
     ) -> int:
-        """Dessine le bloc ajusté et retourne le Y situé juste après la dernière
-        ligne, pour que les éléments suivants collent au texte réel."""
+        """Dessine le bloc ajusté (contour + ombre) et retourne le Y après."""
         fitted = fit_text_block(
             draw, text, _font_path(bold),
             box_width=box_width, box_height=box_height,
@@ -354,7 +444,7 @@ class ImageService:
         )
         cursor_y = y
         for line in fitted.lines:
-            draw.text((x, cursor_y), line, font=fitted.font, fill=fill)
+            ImageService._draw_text_pretty(draw, (x, cursor_y), line, fitted.font, fill)
             cursor_y += fitted.line_height
         return cursor_y
 
@@ -362,10 +452,9 @@ class ImageService:
     def _draw_lines(
         draw, fitted: FittedText, *, x: int, y: int, fill,
     ) -> int:
-        """Dessine un bloc déjà ajusté (fit_text_block) et retourne le Y juste
-        après la dernière ligne."""
+        """Dessine un bloc déjà ajusté (contour + ombre) et retourne le Y après."""
         for line in fitted.lines:
-            draw.text((x, y), line, font=fitted.font, fill=fill)
+            ImageService._draw_text_pretty(draw, (x, y), line, fitted.font, fill)
             y += fitted.line_height
         return y
 
