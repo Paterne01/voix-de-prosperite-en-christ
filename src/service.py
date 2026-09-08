@@ -303,7 +303,10 @@ class PublicationService:
                 narration = build_narration_text(cdict, format=format)
                 if narration and len(narration.strip()) > 10:
                     tmp_voice = Path(tempfile.gettempdir()) / f"vp_tts_{publication_id}.mp3"
-                    tts_voice_path = text_to_speech(narration, str(tmp_voice))
+                    tts_voice_path = text_to_speech(
+                        narration, str(tmp_voice),
+                        voice=self.config.get("tts_voice") or None,
+                    )
                     try:
                         from .video import probe_duration
                         tts_voice_duration = float(probe_duration(tts_voice_path) or 0.0)
