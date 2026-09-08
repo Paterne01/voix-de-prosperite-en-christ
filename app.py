@@ -792,24 +792,17 @@ if __name__ == "__main__":
 
     @log_run("app.py (serveur Flask)")
     def _serve() -> None:
-        import logging as _logging
-
         configure_console()
-        _boot_log = _logging.getLogger("voix")
-        _boot_log.info("BOOT: démarrage app.py")
         # Initialise les angles viraux si vide
         try:
             from src.angle_engine import init_angles
             from src.config import absolute_path
             cfg = load_config()
             init_angles(str(absolute_path(cfg.get("paths", {}).get("database", "BaseDeDonnées/voix_prosperite.sqlite3"))))
-            _boot_log.info("BOOT: angles OK")
-        except Exception as exc:
-            _boot_log.warning("BOOT: angles échoués : %s", exc)
+        except Exception:
+            pass
         # Démarre APScheduler : créneaux des formats actifs + boucle manuelle.
-        _boot_log.info("BOOT: scheduler...")
         get_scheduler()
-        _boot_log.info("BOOT: scheduler OK, Flask sur 8765")
         app.run(host="127.0.0.1", port=8765, debug=False, use_reloader=False)
 
     _serve()
