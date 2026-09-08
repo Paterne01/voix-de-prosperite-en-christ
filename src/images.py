@@ -216,9 +216,10 @@ class ImageService:
         for y in range(H):
             t = y / H
             if is_b:
-                # Bande centrale : fort au milieu, doux aux bords
+                # Bande centrale légère : le fond reste visible, la lisibilité
+                # vient du contour épais + ombre (pas de bandeau)
                 center = abs(t - 0.5) * 2  # 0 centre -> 1 bords
-                a = max(0, int(150 * (1 - center * 1.15)))
+                a = max(0, int(100 * (1 - center * 1.15)))
             else:
                 # Haut : fort en haut, fondu vers 65% (zone titre/accroche)
                 a = max(0, int(150 * (1 - t / 0.65))) if t < 0.65 else 0
@@ -294,7 +295,7 @@ class ImageService:
             draw.text((90, 230), "✨ VOIX DE PROSPÉRITÉ", font=_font(30, bold=True), fill="#d9ae58")
         cursor_y = self._draw_fitted(
             draw, content.title, x=90, y=300, box_width=900, box_height=540,
-            bold=True, max_font=96, min_font=42, fill="#f7ead0",
+            bold=True, max_font=100, min_font=46, fill="#FFD97A",
         )
 
         # Accroche — suit la fin réelle du titre, avec flèche Flutter.
@@ -302,7 +303,7 @@ class ImageService:
             hook_txt = content.hook if content.hook[:2] in ("👉", "🔥", "❓") else f"👉 {content.hook}"
             cursor_y = self._draw_fitted(
                 draw, hook_txt, x=90, y=cursor_y + 40, box_width=900, box_height=400,
-                bold=False, max_font=58, min_font=30, fill="#cfd9ea",
+                bold=False, max_font=60, min_font=32, fill="#FFFFFF",
             )
 
         # Pastille — Format A : « Détails en commentaire » + 👇
