@@ -250,18 +250,22 @@ class ImageService:
 
     @staticmethod
     def _draw_text_pretty(draw: ImageDraw.ImageDraw, xy, text: str, font, fill,
-                           stroke_width: int = 2, shadow: bool = True) -> None:
-        """Texte miniature : contour noir + ombre portée + remplissage (clicable)."""
+                           stroke_width: int = 3, shadow: bool = True) -> None:
+        """Texte lisible sur N'IMPORTE QUEL fond : gros contour noir + ombre portée.
+
+        Le contour épais détache chaque lettre du fond (clair ou sombre) sans
+        aucun bandeau ; l'ombre donne du relief façon miniature pro.
+        """
         x, y = xy
         if shadow:
             try:
-                draw.text((x + 3, y + 3), text, font=font, fill=(0, 0, 0, 200),
-                          stroke_width=stroke_width, stroke_fill=(0, 0, 0, 200))
+                draw.text((x + 4, y + 4), text, font=font, fill=(0, 0, 0, 215),
+                          stroke_width=stroke_width, stroke_fill=(0, 0, 0, 215))
             except TypeError:
-                draw.text((x + 3, y + 3), text, font=font, fill=(0, 0, 0, 200))
+                draw.text((x + 4, y + 4), text, font=font, fill=(0, 0, 0, 215))
         try:
             draw.text((x, y), text, font=font, fill=fill,
-                      stroke_width=stroke_width, stroke_fill=(10, 10, 10, 230))
+                      stroke_width=stroke_width, stroke_fill=(8, 8, 8, 235))
         except TypeError:
             draw.text((x, y), text, font=font, fill=fill)
 
@@ -323,16 +327,6 @@ class ImageService:
             blocks = self._fit_blocks(draw, content, scale=0.97 * available / total)
         total = min(self._blocks_height(blocks), available)
 
-        # Carte sombre arrondie + liseré or derrière le bloc (contraste miniature)
-        card_top = MID_BAND_TOP - 24
-        card_bottom = MID_BAND_TOP + max(total, 200) + 24
-        try:
-            draw.rounded_rectangle((48, card_top, W - 48, card_bottom),
-                                   radius=28, fill=(7, 26, 54, 205),
-                                   outline=(217, 174, 88, 255), width=3)
-        except (TypeError, AttributeError):
-            draw.rectangle((48, card_top, W - 48, card_bottom), fill=(7, 26, 54, 205))
-
         cursor_y = MID_BAND_TOP + max(0, (available - total) // 2)
 
         for fit, fill, is_pill in blocks:
@@ -351,15 +345,15 @@ class ImageService:
         blocks: list[tuple[FittedText, str | None, bool]] = []
         title_fit = fit_text_block(
             draw, content.title, _font_path(True),
-            box_width=900, box_height=s(540), max_font_size=s(92), min_font_size=s(40),
+            box_width=900, box_height=s(540), max_font_size=s(100), min_font_size=s(46),
         )
-        blocks.append((title_fit, "#f7ead0", False))
+        blocks.append((title_fit, "#FFD97A", False))
         if content.hook:
             hook_fit = fit_text_block(
                 draw, content.hook, _font_path(False),
-                box_width=900, box_height=s(400), max_font_size=s(56), min_font_size=s(28),
+                box_width=900, box_height=s(400), max_font_size=s(60), min_font_size=s(32),
             )
-            blocks.append((hook_fit, "#cfd9ea", False))
+            blocks.append((hook_fit, "#FFFFFF", False))
         pill_text = getattr(content, "cta", "") or content.closure
         if pill_text:
             pill_fit = fit_text_block(
