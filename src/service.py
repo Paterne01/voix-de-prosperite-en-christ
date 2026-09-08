@@ -588,17 +588,23 @@ class PublicationService:
         outro_duration = _overlay_duration(self._active_overlay_text("outro", format), default=3)
         # Format B : la vidéo dure le temps de la voix off (+ intro/outro + marge).
         # Évite la coupure avant la fin de la déclaration.
+        # BUG CORRIGÉ : on sonde la DURÉE RÉELLE des clips intro/outro (les fichiers
+        # vidéo font souvent 5-6s alors que la config dit 3s). Avant, le concat
+        # retaillait le corps avec les vraies durées mais le total était calculé
+        # avec les durées théoriques → la voix était amputée de la différence.
         if format == "declaration" and voice_path:
             try:
                 vd = float(probe_duration(voice_path) or 0.0)
                 if vd > 5:
                     import math
-                    # voix + intro/outro + 2s de respiration, borné 15-90s (Reels ≤90s)
-                    max_duration = int(math.ceil(vd + intro_duration + outro_duration + 2))
+                    intro_actual = self._clip_actual_duration(intro, intro_duration)
+                    outro_actual = self._clip_actual_duration(outro, outro_duration)
+                    # voix + vraies durées intro/outro + 3s de respiration, borné 15-90s (Reels ≤90s)
+                    max_duration = int(math.ceil(vd + intro_actual + outro_actual + 3))
                     max_duration = max(15, min(90, max_duration))
                     self.logger.info(
-                        "Durée déclaration adaptée à la voix : %.1fs -> vidéo %ds",
-                        vd, max_duration,
+                        "Durée déclaration adaptée à la voix : voix %.1fs + intro %.1fs + outro %.1fs -> vidéo %ds",
+                        vd, intro_actual, outro_actual, max_duration,
                     )
             except Exception as exc:
                 self.logger.warning("Durée voix illisible, durée 60s par défaut : %s", exc)
@@ -633,6 +639,25 @@ class PublicationService:
             intro_duration=intro_duration, outro_duration=outro_duration,
             voice_path=voice_path,
         )
+
+    @staticmethod
+    def _clip_actual_duration(clip_path: str | Path | None, fallback: int) -> float:
+        """Durée réelle d'un clip intro/outro : sondée si c'est une vidéo,
+        sinon la durée configurée (images converties en clip fixe)."""
+        if not clip_path:
+            return 0.0
+        try:
+            from .video import probe_duration as _probe
+
+            p = Path(clip_path)
+            if not p.is_file():
+                return 0.0
+            if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"):
+                return float(fallback)
+            d = float(_probe(p) or 0.0)
+            return d if d > 0 else float(fallback)
+        except Exception:
+            return float(fallback or 0)
 
     def _active_overlay_file(self, overlay_type: str, format: str) -> str | None:
         """Chemin du fichier du dernier overlay actif du type, ou None."""
