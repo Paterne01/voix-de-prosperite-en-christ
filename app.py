@@ -2,28 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os as _os
-import sys as _sys
 from datetime import datetime
 from pathlib import Path
 
-
-def _boot_trace(step: str) -> None:
-    try:
-        with open(
-            r"C:\Users\Paterne BALAGIZI\Documents\Codex\2026-07-20\cr-e-une-t-che-programm\Logs\boot_trace.log",
-            "a", encoding="utf-8",
-        ) as fh:
-            fh.write(f"{datetime.now().isoformat()} pid={_os.getpid()} {step}\n")
-    except Exception:
-        pass
-
-
-_boot_trace("imports-start")
-
 from flask import Flask, jsonify, redirect, render_template, request
-
-_boot_trace("flask-ok")
 
 from src.config import ROOT, absolute_path, load_config, save_config
 from src.logging_setup import setup_logging
@@ -31,8 +13,6 @@ from src.publishers.tiktok import TikTokOAuth, persist_token
 from src.scheduler import PostScheduler
 from src.secrets import get_secret, secret_status, set_secret
 from src.service import PublicationService
-
-_boot_trace("imports-ok")
 
 app = Flask(__name__)
 # Les templates sont relus à chaque requête : une édition d'interface est
