@@ -805,4 +805,17 @@ if __name__ == "__main__":
         get_scheduler()
         app.run(host="127.0.0.1", port=8765, debug=False, use_reloader=False)
 
-    _serve()
+    try:
+        _serve()
+    except BaseException:
+        # pythonw + tâche planifiée = stderr invisible : on persiste le
+        # traceback pour diagnostiquer les crashs de démarrage.
+        try:
+            import traceback
+
+            with open(ROOT / "Logs" / "startup_err.log", "a", encoding="utf-8") as fh:
+                fh.write(f"\n===== {datetime.now().isoformat()} =====\n")
+                traceback.print_exc(file=fh)
+        except Exception:
+            pass
+        raise
