@@ -346,7 +346,8 @@ class ImageService:
         blocks: list[tuple[FittedText, str | None, bool]] = []
         title_fit = fit_text_block(
             draw, content.title, _font_path(True),
-            box_width=900, box_height=s(540), max_font_size=s(100), min_font_size=s(46),
+            box_width=900, box_height=s(540), max_font_size=s(100), min_font_size=s(40),
+            max_lines=3,
         )
         blocks.append((title_fit, "#FFD97A", False))
         if content.hook:
