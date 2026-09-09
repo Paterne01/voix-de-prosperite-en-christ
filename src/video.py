@@ -566,7 +566,7 @@ def _image_to_clip(
         "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
         "-vf",
         f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black",
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1",
         "-c:v", "libx264",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
@@ -728,13 +728,17 @@ def _concat_pieces(
 
 
 def _normalize_clip(src: Path, dst: Path, dur: float | None = None) -> None:
-    """Re-encode un clip en 1080×1920, 30 fps, yuv420p, éventuellement tronqué."""
+    """Re-encode un clip en 1080×1920, 30 fps, yuv420p, éventuellement tronqué.
+
+    `setsar=1` : sans lui, des SAR hétérogènes (ex. 0:1 vs 1436:711) font
+    échouer le concat avec "Failed to configure output pad" (vu en logs).
+    """
     cmd = ["ffmpeg", "-y", "-i", str(src)]
     if dur is not None:
         cmd += ["-t", f"{dur:.2f}"]
     cmd += [
         "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,"
-        "crop=1080:1920,fps=30,format=yuv420p",
+        "crop=1080:1920,setsar=1,fps=30,format=yuv420p",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
     ]
     if _has_audio(src):

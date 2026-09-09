@@ -58,11 +58,18 @@ def slot_due_now(config: dict, database, now: datetime | None = None) -> str | N
     return None
 
 
-def _acquire_manual_lock(timeout_s: int = 280) -> bool:
+def _acquire_manual_lock(timeout_s: int = 5400) -> bool:
     """Verrou fichier pour empêcher deux ticks manuels concurrents de publier
     2 fichiers pour le même créneau (APScheduler toutes les 5 min + tâche
     Windows toutes les 10 min dans la fenêtre 19:55-20:20). Le verrou expire
-    après `timeout_s` pour éviter un blocage permanent si un tick plante."""
+    après `timeout_s` pour éviter un blocage permanent si un tick plante.
+
+    90 min et non 280 s : une publication manuelle contient jusqu'à 3 délais
+    anti-bot de 25 min (Facebook + YouTube + TikTok) + encodage ffmpeg ; avec
+    280 s le verrou expirait EN PLEINE publication et le tick suivant prenait
+    le même créneau → fichier consommé/supprimé pendant que l'autre tick
+    l'encodait = "Vidéo introuvable" (échec 04:00 du 09/09). Les créneaux sont
+    espacés de 16 h, un verrou périmé de 90 min ne bloque jamais le suivant."""
     from pathlib import Path
     from src.config import absolute_path
 
