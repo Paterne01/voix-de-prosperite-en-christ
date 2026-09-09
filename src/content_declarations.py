@@ -231,16 +231,17 @@ matériel garanti, une guérison ou un résultat automatique.
 FOCALISATION — UN pilier par texte. Le « Pilier obligatoire » fourni dans l'invite est le
 SEUL thème à développer, sans mélange.
 
-STYLE — français ORAL, ultra-direct, percutant, au « tu ». Phrases très courtes, max 5 LIGNES au total (35-45 mots). Chaque mot doit frapper : bannis le remplissage, les formules creuses. Au PRÉSENT, comme une parole déjà en marche : « Je déclare… », « Tu es… », « Aujourd'hui… ».
+STYLE — français ORAL, ultra-direct, percutant, au « tu ». Phrases très courtes, max 3 LIGNES au total (18-28 mots). Chaque mot doit frapper : bannis le remplissage, les formules creuses. Au PRÉSENT, comme une parole déjà en marche : « Tu es… », « Aujourd'hui… », « Reçois… ».
+INTERDICTION ABSOLUE : JAMAIS le pronom « je » ni « j' » ni « nous » nulle part (ni dans « declaration », ni « closure », ni « cta »). La parole s'adresse au lecteur (« tu ») ou parle à l'impératif, jamais à la première personne. Exemples d'ouverture : « Aujourd'hui… », « Tu es… », « Reçois… », « Fini… ».
 
 OUVERTURE VARIÉE — ne commence jamais deux posts de la même façon. Alterne volontairement :
-parfois « Je déclare… », parfois « Aujourd'hui… », parfois une question qui accroche le
+parfois « Aujourd'hui… », parfois une question qui accroche le
 lecteur, parfois une petite scène de vie en ouverture, parfois l'affirmation directe.
 L'ouverture doit TOUCHER une réalité que le lecteur vit (honte financière, comparaison,
 peur de l'échec, prières sans réponse, jugement des proches, travail sans résultat visible)
 puis basculer en déclaration positive. Ne nomme JAMAIS le type d'ouverture choisi.
 
-CONTENU — « declaration » : le corps du texte, 2 à 4 phrases, 35-45 mots, MAX 5 LIGNES VISUELLES. Direct, percutant, au présent, sans remplissage. Chaque phrase doit frapper : pas de formule vague, pas de répétition. Termine par un verset cité avec sa référence exacte (ex. « Ésaïe 19:1 » — jamais sans la référence). Le champ « closure » : une seule phrase courte (~12-15 mots) qui « clôture » sur TOUT l'être (spirituel, décisions, relations, finances, santé, projets) — toujours reformulée, jamais figée, jamais de « !!! ». Le champ « cta » : UNE phrase très courte et humaine (~8-12 mots), au « tu », qui invite à PARTAGER (ex. « Partage à quelqu'un qui en a besoin 🙏 »). Vérifie les « éléments interdits » et n'écris jamais le même CTA.
+CONTENU — « declaration » : le corps du texte, 1 à 3 phrases COURTES, 18-28 mots, MAX 3 LIGNES VISUELLES (le texte tient sur l'image en gros caractères). Direct, percutant, au présent, sans remplissage. Chaque phrase doit frapper : pas de formule vague, pas de répétition. Termine par un verset cité avec sa référence exacte (ex. « Ésaïe 19:1 » — jamais sans la référence). Le champ « closure » : une seule phrase courte (~12-15 mots, sans « je ») qui « clôture » sur TOUT l'être (spirituel, décisions, relations, finances, santé, projets) — toujours reformulée, jamais figée, jamais de « !!! ». Le champ « cta » : UNE phrase très courte et humaine (~8-12 mots, sans « je »), au « tu », qui invite à PARTAGER (ex. « Partage à quelqu'un qui en a besoin 🙏 »). Vérifie les « éléments interdits » et n'écris jamais le même CTA.
 
 STYLE — PAS de commentaire long ni de liste. PAS de tournures robots : « il est essentiel
 de », « n'oublions pas que », « en conclusion », « il convient de », « n'hésite pas à ».
@@ -384,25 +385,13 @@ class DeclarationGenerator:
         mix = (index * 37 + 11) % (1 << 30)
         plan = plans[mix % len(plans)]
         manifeste = LOCAL_MANIFEST[(mix >> 3) % len(LOCAL_MANIFEST)]
-        # OUVERTURE VARIÉE : une phrase de vie qui TOUCHE la douleur du lecteur
-        # avant la déclaration, pour que deux posts ne commencent jamais pareil.
-        openers = [
-            "",  # affirmation directe classique
-            "",
-            "Tu te demandes si cela va un jour changer ? ",
-            "Fatigué de promesses sans effet ? ",
-            "Si tu as déjà douté en secret, écoute ceci : ",
-            "Au milieu de tes questions, voici une parole ferme : ",
-            "Tu n'es pas le seul à espérer ; écoute ce que Dieu dit : ",
-            "",
-        ]
-        opener = openers[mix % len(openers)]
-        # Structure NON figée : on alterne « plan → manifeste » et
-        # « manifeste → plan » pour que la phrase ne soit jamais le même moule.
+        # Format B court (max 3 lignes image) : plan + manifeste SANS phrase
+        # d'ouverture (l'amorce coûtait ~8 mots et poussait à 4-5 lignes).
+        # L'alternance plan↔manifeste garde la variété des débuts.
         if (mix >> 4) % 2:
-            line = f"{opener}{plan} {manifeste}"
+            line = f"{plan} {manifeste}"
         else:
-            line = f"{opener}{manifeste} {plan}"
+            line = f"{manifeste} {plan}"
         closure = LOCAL_CLOSURES[mix % len(LOCAL_CLOSURES)]
         cta = LOCAL_CTAS[index % len(LOCAL_CTAS)]
         return Declaration(
@@ -417,14 +406,20 @@ class DeclarationGenerator:
             hashtags=_build_hashtags(pillar, str(index), random.Random(str(index))),
         )
 
+    _NO_JE = re.compile(r"\bje\b|\bj['’]", re.IGNORECASE)
+
     def _validate(self, content: Declaration, exclusions: dict[str, list[str]]) -> None:
         if content.pillar not in PILLARS:
             raise ValueError("Pilier inconnu pour la déclaration")
-        if len(content.declaration.split()) > 45:
-            raise ValueError("Déclaration trop longue (max 5 lignes / 45 mots)")
-        # Max 5 lignes visuelles ≈ 5 phrases
-        if len([s for s in re.split(r"[.!?]+", content.declaration) if s.strip()]) > 5:
-            raise ValueError("Déclaration trop longue (max 5 phrases)")
+        # Pas de première personne : la parole s'adresse au lecteur (« tu »)
+        for field in ("declaration", "closure", "cta"):
+            if self._NO_JE.search(getattr(content, field) or ""):
+                raise ValueError(f"Pronom « je » interdit en Format B ({field})")
+        if len(content.declaration.split()) > 30:
+            raise ValueError("Déclaration trop longue (max 3 lignes / 30 mots)")
+        # Max 3 lignes visuelles ≈ 3 phrases courtes
+        if len([s for s in re.split(r"[.!?]+", content.declaration) if s.strip()]) > 3:
+            raise ValueError("Déclaration trop longue (max 3 phrases)")
         if not content.closure:
             raise ValueError("Déclaration sans phrase de clôture")
         if not content.cta:

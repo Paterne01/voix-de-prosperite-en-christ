@@ -279,12 +279,11 @@ class PublicationService:
         if overlay_path:
             created_media.append(overlay_path)
 
-        # TTS gTTS : lit UNIQUEMENT le texte affiché à l'écran
-        # Format A : titre + accroche (jamais les points du commentaire).
-        # Format B : déclaration + clôture.
+        # TTS voix homme : FORMAT A UNIQUEMENT (titre + accroche affichés).
+        # Format B : pas de voix off — juste le joli texte animé sur fond animé.
         tts_voice_path = None
         tts_voice_duration = 0.0
-        if not dry_run and self.config.get("tts_enabled"):
+        if not dry_run and format == "video" and self.config.get("tts_enabled"):
             try:
                 from src.tts import build_narration_text, text_to_speech
                 import tempfile
@@ -403,7 +402,7 @@ class PublicationService:
                     pillar=getattr(content, "pillar", ""),
                     angle_type=angle_type,
                     hook_type=getattr(content, "hook_type", ""),
-                    tts_enabled=int(bool(self.config.get("tts_enabled"))),
+                    tts_enabled=int(bool(self.config.get("tts_enabled")) and format == "video"),
                     video_duration_seconds=float(self.config.get("videos", {}).get("max_duration", 60)) if format=="video" else 0,
                     publish_hour=datetime.now().hour,
                     platform=",".join([k for k,v in networks_out.items() if v.get("status")=="ok"]) or "facebook",
