@@ -130,8 +130,12 @@ def run_manual(config: dict, service, logger, dry_run: bool = False) -> dict:
     # publiaient 2 fichiers distincts pour le même créneau → 2 posts YouTube.
     if not dry_run and not _acquire_manual_lock():
         return {"status": "idle", "message": "Tick manuel déjà en cours (verrou actif)."}
+    # Le verrou DOIT être libéré sur TOUS les chemins de sortie (y compris
+    # idle) : sinon un tick d'attente empoisonne le verrou jusqu'à expiration
+    # (90 min) et fait rater des créneaux entiers (20:00 du 09/09, 04:00 du 10/09).
     raw_files = [f for f in list_pending(config) if f["kind"] in ("image", "video")]
     if not raw_files:
+        _release_manual_lock()
         return {"status": "idle", "message": "Aucun contenu en attente."}
 
     # Anti-doublon : un fichier déjà publié avec succès (ou en cours) n'est JAMAIS republié.
@@ -142,6 +146,7 @@ def run_manual(config: dict, service, logger, dry_run: bool = False) -> dict:
         delete_pending(config, stale["name"])
     files = [f for f in raw_files if f not in already and _path(config, f["name"]).exists()]
     if not files:
+        _release_manual_lock()
         return {"status": "idle", "message": "Aucun contenu en attente (après dédoublonnage)."}
 
     # On ne publie que des fichiers dont la copie est terminée (mtime > 60 s) et toujours présents.
@@ -154,11 +159,13 @@ def run_manual(config: dict, service, logger, dry_run: bool = False) -> dict:
             continue
     files = filtered
     if not files:
+        _release_manual_lock()
         return {"status": "idle", "message": "Fichier(s) en cours de copie, nouvel essai au prochain tour."}
     files.sort(key=lambda f: _mtime(config, f["name"]))
 
     slot = slot_due_now(config, service.database, now)
     if not slot:
+        _release_manual_lock()
         return {"status": "idle", "message": "Aucune heure de publication atteinte — fichiers en attente du prochain créneau."}
 
     networks = config.get("manual_schedule", {}).get("networks") or []
