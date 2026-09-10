@@ -344,23 +344,26 @@ class ImageService:
             return max(8, int(value * scale))
 
         blocks: list[tuple[FittedText, str | None, bool]] = []
+        # Textes courts → police GÉANTE qui remplit le centre (le fitter prend
+        # toujours la plus grande taille tenant dans la boîte ; les longs
+        # textes redescendent vers min via la boucle de réduction).
         title_fit = fit_text_block(
             draw, content.title, _font_path(True),
-            box_width=900, box_height=s(540), max_font_size=s(100), min_font_size=s(40),
+            box_width=900, box_height=s(760), max_font_size=s(150), min_font_size=s(40),
             max_lines=3,
         )
         blocks.append((title_fit, "#FFD97A", False))
         if content.hook:
             hook_fit = fit_text_block(
                 draw, content.hook, _font_path(False),
-                box_width=900, box_height=s(400), max_font_size=s(60), min_font_size=s(32),
+                box_width=900, box_height=s(380), max_font_size=s(84), min_font_size=s(32),
             )
             blocks.append((hook_fit, "#FFFFFF", False))
         pill_text = getattr(content, "cta", "") or content.closure
         if pill_text:
             pill_fit = fit_text_block(
                 draw, pill_text, _font_path(True),
-                box_width=820, box_height=s(130), max_font_size=s(34), min_font_size=s(20),
+                box_width=820, box_height=s(150), max_font_size=s(40), min_font_size=s(20),
             )
             blocks.append((pill_fit, None, True))
         return blocks
