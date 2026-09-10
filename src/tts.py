@@ -115,6 +115,12 @@ def build_narration_text(content: dict, format: str = "video") -> str:
         closure = content.get("closure") or ""
         # La déclaration contient déjà le verset ; on ajoute la clôture
         return " ".join(p.strip() for p in (decl, closure) if p and p.strip())
+    # Format A : la légende ENTIÈRE (titre + accroche + phrase "détail en
+    # commentaire") — jamais les points du commentaire, mais on tease pour
+    # inciter à ouvrir les commentaires.
+    caption = (content.get("caption") or "").strip()
+    if caption:
+        return caption
     title = (content.get("title") or "").strip()
     hook = (content.get("hook") or "").strip()
     if title and hook:

@@ -289,16 +289,10 @@ class ImageService:
         self._draw_logo(image)
 
     def _draw_branding_top(self, draw: ImageDraw.ImageDraw, content) -> None:
-        """Format A : accroche miniature (eyebrow + titre + hook + pastille)."""
-        # Eyebrow doré : contexte + incitation au clic
-        try:
-            eb_font = _font(30, bold=True)
-            draw.text((93, 233), "✨ VOIX DE PROSPÉRITÉ", font=eb_font, fill=(217, 174, 88, 255),
-                      stroke_width=1, stroke_fill=(10, 10, 10, 230))
-        except TypeError:
-            draw.text((90, 230), "✨ VOIX DE PROSPÉRITÉ", font=_font(30, bold=True), fill="#d9ae58")
+        """Format A : titre + accroche + pastille (sans eyebrow : le logo
+        officiel est déjà affiché dans l'image)."""
         cursor_y = self._draw_fitted(
-            draw, content.title, x=90, y=300, box_width=900, box_height=540,
+            draw, content.title, x=90, y=260, box_width=900, box_height=560,
             bold=True, max_font=100, min_font=46, fill="#FFD97A",
         )
 
@@ -348,17 +342,21 @@ class ImageService:
             return max(8, int(value * scale))
 
         blocks: list[tuple[FittedText, str | None, bool]] = []
-        # Textes courts → police GÉANTE qui remplit le centre (le fitter prend
-        # toujours la plus grande taille tenant dans la boîte ; les longs
-        # textes redescendent vers min via la boucle de réduction).
+        # Deux temps : d'abord 3 lignes en TRÈS grand (textes courts maîtrisés),
+        # sinon repli 7 lignes (textes plus longs, jamais coupés).
         title_fit = fit_text_block(
             draw, content.title, _font_path(True),
-            box_width=900, box_height=s(800), max_font_size=s(150), min_font_size=s(40),
-            # 7 lignes max (et non 3) : à 3 lignes, 20 mots = 7 mots/ligne =
-            # petite police forcée. À 7 lignes, ~3 mots/ligne → police ~90 px
-            # qui remplit le centre. Les longs textes redescendent via min.
-            max_lines=7,
+            box_width=900, box_height=s(800), max_font_size=s(170), min_font_size=s(85),
+            max_lines=3,
         )
+        # 85 = le min (jamais rendu normalement : la boucle descend de 2 en 2
+        # depuis 170) → repli seulement si on a touché le fond (= tronqué).
+        if title_fit.font_size < 86:
+            title_fit = fit_text_block(
+                draw, content.title, _font_path(True),
+                box_width=900, box_height=s(800), max_font_size=s(130), min_font_size=s(40),
+                max_lines=7,
+            )
         blocks.append((title_fit, "#FFD97A", False))
         if content.hook:
             hook_fit = fit_text_block(
