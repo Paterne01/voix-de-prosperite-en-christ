@@ -251,19 +251,23 @@ class ImageService:
 
     @staticmethod
     def _draw_text_pretty(draw: ImageDraw.ImageDraw, xy, text: str, font, fill,
-                           stroke_width: int = 3, shadow: bool = True) -> None:
+                           stroke_width: int | None = None, shadow: bool = True,
+                           font_size: int = 60) -> None:
         """Texte lisible sur N'IMPORTE QUEL fond : gros contour noir + ombre portée.
 
-        Le contour épais détache chaque lettre du fond (clair ou sombre) sans
-        aucun bandeau ; l'ombre donne du relief façon miniature pro.
+        Contour et ombre proportionnels à la taille (défaut auto) : à 150 px,
+        un contour de 3 px serait invisible, on monte à ~5 px + ombre 6 px.
         """
+        if stroke_width is None:
+            stroke_width = max(3, round(font_size / 30))
+        off = stroke_width + 1
         x, y = xy
         if shadow:
             try:
-                draw.text((x + 4, y + 4), text, font=font, fill=(0, 0, 0, 215),
+                draw.text((x + off, y + off), text, font=font, fill=(0, 0, 0, 215),
                           stroke_width=stroke_width, stroke_fill=(0, 0, 0, 215))
             except TypeError:
-                draw.text((x + 4, y + 4), text, font=font, fill=(0, 0, 0, 215))
+                draw.text((x + off, y + off), text, font=font, fill=(0, 0, 0, 215))
         try:
             draw.text((x, y), text, font=font, fill=fill,
                       stroke_width=stroke_width, stroke_fill=(8, 8, 8, 235))
@@ -349,8 +353,11 @@ class ImageService:
         # textes redescendent vers min via la boucle de réduction).
         title_fit = fit_text_block(
             draw, content.title, _font_path(True),
-            box_width=900, box_height=s(760), max_font_size=s(150), min_font_size=s(40),
-            max_lines=3,
+            box_width=900, box_height=s(800), max_font_size=s(150), min_font_size=s(40),
+            # 7 lignes max (et non 3) : à 3 lignes, 20 mots = 7 mots/ligne =
+            # petite police forcée. À 7 lignes, ~3 mots/ligne → police ~90 px
+            # qui remplit le centre. Les longs textes redescendent via min.
+            max_lines=7,
         )
         blocks.append((title_fit, "#FFD97A", False))
         if content.hook:
@@ -443,7 +450,8 @@ class ImageService:
         )
         cursor_y = y
         for line in fitted.lines:
-            ImageService._draw_text_pretty(draw, (x, cursor_y), line, fitted.font, fill)
+            ImageService._draw_text_pretty(draw, (x, cursor_y), line, fitted.font, fill,
+                                           font_size=fitted.font_size)
             cursor_y += fitted.line_height
         return cursor_y
 
@@ -453,7 +461,8 @@ class ImageService:
     ) -> int:
         """Dessine un bloc déjà ajusté (contour + ombre) et retourne le Y après."""
         for line in fitted.lines:
-            ImageService._draw_text_pretty(draw, (x, y), line, fitted.font, fill)
+            ImageService._draw_text_pretty(draw, (x, y), line, fitted.font, fill,
+                                           font_size=fitted.font_size)
             y += fitted.line_height
         return y
 
