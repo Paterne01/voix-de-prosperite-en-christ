@@ -25,6 +25,72 @@ import requests
 
 from .secrets import get_secret
 
+
+def _cooldown_path():
+    from .config import ROOT
+
+    return ROOT / "Logs" / "llm_cooldown.json"
+
+
+def _cooldowns_load() -> dict:
+    import time
+
+    try:
+        with open(_cooldown_path(), encoding="utf-8") as fh:
+            data = json.load(fh)
+        now = time.time()
+        # Nettoie les entrées expirées au passage
+        return {k: v for k, v in data.items() if isinstance(v, (int, float)) and v > now} if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _cooldowns_save(state: dict) -> None:
+    try:
+        path = _cooldown_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(state, fh)
+    except Exception:
+        pass
+
+
+def cooling_until(provider_name: str) -> float:
+    """Epoch jusqu'à laquelle le provider est en pause, 0.0 si disponible."""
+    import time
+
+    return float(_cooldowns_load().get(provider_name, 0.0) or 0.0) - time.time()
+
+
+def note_provider_cooldown(provider_name: str, exc: Exception) -> float:
+    """Met un provider en pause après un échec quota/clé/rate-limit.
+
+    Évite de marteler un provider à sec (chaque tentative ratée = appels
+    gaspillés qui repoussent la récupération des quotas gratuits) :
+    - rate-limit / 429 → 20 min ;
+    - quota / crédits / facturation → 6 h ;
+    - clé invalide / 401 / permission → 24 h (action manuelle requise).
+    Retourne la durée de pause en secondes (0 si non concerné).
+    """
+    import time
+
+    low = str(exc).lower()
+    if any(m in low for m in ("429", "rate limit", "ratelimit", "rate-limited", "temporarily")):
+        wait = 20 * 60
+    elif any(m in low for m in ("quota", "insufficient", "credit", "billing", "payment required", "limit exceeded", "resource_exhausted")):
+        wait = 6 * 3600
+    elif any(m in low for m in ("incorrect api key", "invalid_api_key", "invalid api key", "unauthorized", "authentication", "401", "forbidden", "permission")):
+        wait = 24 * 3600
+    else:
+        return 0.0
+    try:
+        state = _cooldowns_load()
+        state[provider_name] = time.time() + wait
+        _cooldowns_save(state)
+    except Exception:
+        pass
+    return float(wait)
+
 # ── Registre des fournisseurs ────────────────────────────────────────────────
 # Chaque entrée : nom de clé de secret (`api_key_secret`), base_url par défaut
 # et modèle par défaut. Tout est surchargeable dans `config.ai.providers.<nom>`.
@@ -39,7 +105,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     "openrouter": {
         "api_key_secret": "openrouter_api_key",
         "base_url": "https://openrouter.ai/api/v1",
-        "model": "poolside/laguna-s-2.1:free",
+        "model": "google/gemma-4-31b-it:free",
         "json_mode": True,
     },
     "grok": {
@@ -51,7 +117,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     "nvidia": {
         "api_key_secret": "nvidia_api_key",
         "base_url": "https://integrate.api.nvidia.com/v1",
-        "model": "meta/llama-3.3-70b-instruct",
+        "model": "nvidia/llama-3.1-nemotron-70b-instruct",
         "json_mode": True,
     },
     "zen": {
@@ -275,7 +341,11 @@ def generate_with_fallback(
     providers = ordered_providers(config)
     last_error: Exception | None = None
     attempted: list[str] = []
+    skipped: list[str] = []
     for provider in providers:
+        if cooling_until(provider.name) > 0:
+            skipped.append(provider.name)
+            continue
         attempted.append(provider.name)
         try:
             if do_json:
@@ -287,7 +357,10 @@ def generate_with_fallback(
             return data, provider.name
         except Exception as exc:
             last_error = exc
+            note_provider_cooldown(provider.name, exc)
     detail = " ; ".join(attempted) if attempted else "aucun provider configuré"
+    if skipped:
+        detail += f" (en pause quota/clé : {', '.join(skipped)})"
     raise LLMError(f"Tous les fournisseurs ont échoué ({detail}) : {last_error}", detail, last_error) from last_error
 
 
@@ -384,6 +457,7 @@ def generate_with_retry(
                 last_error = exc
                 if _is_exhausted_error(exc):
                     dead.add(provider.name)
+                    note_provider_cooldown(provider.name, exc)
                 elif _is_timeout(exc):
                     # Timeout répété : le provider ne répond pas en temps utile
                     # (réseau bloqué) → on le laisse tomber au lieu de perdre la
