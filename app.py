@@ -47,6 +47,12 @@ def get_scheduler() -> PostScheduler:
 def index():
     config = load_config()
     instance = service()
+    try:
+        from src.meta import facebook_token_status
+
+        fb_status = facebook_token_status(config, get_secret("facebook_page_token"))
+    except Exception:
+        fb_status = {"ok": None, "message": "configuré"}
     from src.config import format_for
 
     next_slots = [
