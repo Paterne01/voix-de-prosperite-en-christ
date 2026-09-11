@@ -30,12 +30,21 @@ class FacebookReelsPublisher(BasePublisher):
 
     def validate(self) -> dict:
         """Vérifie que le Page Access Token est valide pour cette Page."""
-        resp = requests.get(
-            f"https://graph.facebook.com/{self.api_version}/{self.page_id}",
-            params={"fields": "id,name", "access_token": self.token},
-            timeout=30,
-        )
-        resp.raise_for_status()
+        try:
+            resp = requests.get(
+                f"https://graph.facebook.com/{self.api_version}/{self.page_id}",
+                params={"fields": "id,name", "access_token": self.token},
+                timeout=30,
+            )
+            resp.raise_for_status()
+        except requests.HTTPError as exc:
+            from ..meta import explain_graph_error
+
+            diag = explain_graph_error(exc)
+            if diag:
+                self.logger.warning("Facebook : %s", diag)
+                raise RuntimeError(diag) from exc
+            raise
         return resp.json()
 
     def publish(
