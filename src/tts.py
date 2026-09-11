@@ -1,9 +1,10 @@
-"""Voix off masculine neurale (edge-tts) — homme 25-50 ans, grave et inspirant.
+"""Voix off masculine — chaîne : edge-tts (Henri, neural) → Piper local (tom)
+→ gTTS (dernier recours).
 
-gTTS ne propose qu'une seule voix fixe par langue (sonorité féminine, sans
-choix possible) : pour une voix d'homme profonde, on utilise edge-tts neural
-avec une voix masculine FR (défaut : fr-FR-HenriNeural, mûre et posée).
-Repli automatique sur gTTS si le réseau coupe.
+- edge-tts : la plus humaine (gratuit, voix masculine mûre fr-FR-HenriNeural).
+- Piper `fr_FR-tom-medium` : synthèse LOCALE (aucun réseau, toujours dispo),
+  voix d'homme française naturelle, bien au-dessus de gTTS.
+- gTTS : repli ultime (sonorité robotique).
 """
 from __future__ import annotations
 
@@ -17,6 +18,15 @@ VOICE = DEFAULT_VOICE
 # Débit légèrement ralenti (solennel) + ton un peu plus grave, sans robotiser.
 RATE = "-5%"
 PITCH = "-2Hz"
+
+# Voix Piper locale (homme FR, embarquée : assets/tts_voices/).
+PIPER_VOICE = "fr_FR-tom-medium"
+
+
+def _piper_model_path() -> Path:
+    from .config import ROOT
+
+    return ROOT / "assets" / "tts_voices" / f"{PIPER_VOICE}.onnx"
 
 
 def _split_chunks(text: str, max_chars: int = 400) -> list[str]:
@@ -36,7 +46,7 @@ def _split_chunks(text: str, max_chars: int = 400) -> list[str]:
 
 
 def text_to_speech(text: str, output_path: str, voice: str | None = None) -> str:
-    """Synthèse vocale homme (edge-tts neural) -> MP3. Repli gTTS si échec."""
+    """Synthèse vocale homme : edge-tts → Piper local → gTTS (dernier recours)."""
     import asyncio
 
     text = (text or "").strip()
@@ -46,6 +56,9 @@ def text_to_speech(text: str, output_path: str, voice: str | None = None) -> str
     # gTTS explicite demandé via config ("gTTS...") : honore le choix
     if voice.lower().startswith("gtts"):
         return _gtts(text, output_path)
+    # Piper explicite demandé via config ("piper...") : voix locale directe
+    if voice.lower().startswith("piper"):
+        return _piper(text, output_path)
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -58,7 +71,29 @@ def text_to_speech(text: str, output_path: str, voice: str | None = None) -> str
         asyncio.run(_run())
         return str(out)
     except Exception:
+        pass
+    try:
+        return _piper(text, output_path)
+    except Exception:
         return _gtts(text, output_path)
+
+
+def _piper(text: str, output_path: str) -> str:
+    """Voix Piper locale (fr_FR-tom-medium, homme) : WAV 22050 Hz, sans réseau."""
+    import wave
+
+    from piper import PiperVoice
+
+    model = _piper_model_path()
+    if not model.is_file():
+        raise FileNotFoundError(f"Voix Piper absente : {model}")
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    wav_path = out.with_suffix(".wav") if out.suffix.lower() != ".wav" else out
+    voice = PiperVoice.load(str(model))
+    with wave.open(str(wav_path), "wb") as wav:
+        voice.synthesize_wav(text, wav)
+    return str(wav_path)
 
 
 def _gtts(text: str, output_path: str) -> str:
