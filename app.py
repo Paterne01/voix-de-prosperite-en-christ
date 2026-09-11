@@ -63,6 +63,7 @@ def index():
         "index.html",
         config=config,
         secrets=secret_status(),
+        fb_status=fb_status,
         publications=instance.database.recent(),
         next_slots=next_slots,
         formats=instance.database.list_formats(),
@@ -468,6 +469,13 @@ def save_secrets():
     for name, value in request.form.items():
         if value.strip():
             set_secret(name, value)
+    # Nouveau jeton éventuel → on revérifie l'état Facebook au prochain chargement
+    try:
+        from src.meta import clear_token_status_cache
+
+        clear_token_status_cache()
+    except Exception:
+        pass
     return jsonify(ok=True)
 
 
