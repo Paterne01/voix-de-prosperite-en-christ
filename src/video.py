@@ -598,9 +598,10 @@ def _video_pad_chain(label: str = "v0", animate: bool = True, variant: str | Non
     if variant is None:
         variant = _rnd.choice(["zoom_in", "zoom_out", "pan_left", "pan_right"])
     total = max(1, int(duration) * 30)
+    # Reste en 1080p (l'upscale 2160 quadruplait le temps d'encodage CPU).
     base = (
-        "[0:v]scale=2160:3840,"
-        "crop=2160:3840,scale=2160:3840:force_original_aspect_ratio=disable,"
+        "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
+        "crop=1080:1920,"
     )
     if variant == "zoom_out":
         zp = f"zoompan=z='if(lte(on,1),1.10,max(zoom-0.0006,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30"
