@@ -138,6 +138,14 @@ def _gtts(text: str, output_path: str) -> str:
     return str(out)
 
 
+def _strip_emojis(text: str) -> str:
+    """Retire émojis/symboles que la voix lirait à voix haute (« 👇 » lu
+    comme « index vers le bas »). On garde lettres (accents inclus),
+    chiffres, espaces et ponctuation courante."""
+    cleaned = re.sub(r"[^\w\s\.,!?;:'\"\-…\(\)«»]", "", text, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
 def build_narration_text(content: dict, format: str = "video") -> str:
     """Texte LU par la voix off = UNIQUEMENT le texte affiché à l'écran.
 
@@ -152,12 +160,12 @@ def build_narration_text(content: dict, format: str = "video") -> str:
         return " ".join(p.strip() for p in (decl, closure) if p and p.strip())
     # Format A : la légende ENTIÈRE (titre + accroche + phrase "détail en
     # commentaire") — jamais les points du commentaire, mais on tease pour
-    # inciter à ouvrir les commentaires.
+    # inciter à ouvrir les commentaires. Émojis retirés (la voix les décrirait).
     caption = (content.get("caption") or "").strip()
     if caption:
-        return caption
+        return _strip_emojis(caption)
     title = (content.get("title") or "").strip()
     hook = (content.get("hook") or "").strip()
     if title and hook:
-        return f"{title}. {hook}"
-    return title or hook
+        return _strip_emojis(f"{title}. {hook}")
+    return _strip_emojis(title or hook)
