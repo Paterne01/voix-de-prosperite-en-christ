@@ -899,13 +899,26 @@ class PublicationService:
         # Résidus nettoyés dès que la publication est confirmée sur au moins un
         # réseau (short recadré, calque, fichier source en attente). En cas
         # d'échec total, le fichier reste pour un nouvel essai au prochain créneau.
+        # EXCEPTION (rattrapage Facebook) : si Facebook était demandé mais a
+        # échoué alors qu'un autre réseau a réussi (ex. YT ok / FB timeout),
+        # on CONSERVE le short construit + la source : le rattrapage Facebook
+        # seul (`republish_facebook`) les réutilisera. Sans cela, le post FB
+        # manqué est définitivement perdu (cas manuel 04:00 du 12/09).
+        fb_wanted = wants("facebook")
+        fb_ok = networks_out.get("facebook", {}).get("status") == "ok"
         if networks_out and any(v.get("status") == "ok" for v in networks_out.values()):
-            self._purge(created_media)
-            if consume_source:
-                try:
-                    media.unlink()  # le fichier source en attente est consommé
-                except OSError as exc:
-                    self.logger.warning("Impossible de supprimer le fichier source %s : %s", media, exc)
+            if fb_wanted and not fb_ok:
+                self.logger.info(
+                    "Publication manuelle %s : Facebook à rattraper — médias conservés.",
+                    publication_id,
+                )
+            else:
+                self._purge(created_media)
+                if consume_source:
+                    try:
+                        media.unlink()  # le fichier source en attente est consommé
+                    except OSError as exc:
+                        self.logger.warning("Impossible de supprimer le fichier source %s : %s", media, exc)
 
         return {"id": publication_id, "status": overall, "format": "manual", **networks_out}
 
@@ -964,6 +977,10 @@ class PublicationService:
             candidate = videos_dir / f"short_{stem}.mp4"
             if candidate.is_file():
                 return candidate, "video"
+            # Repli : le Short a pu être nettoyé (purge 2 j) mais l'image
+            # brandée reste → on la publie (mieux que rien).
+            if Path(record["image_path"]).is_file():
+                return Path(record["image_path"]), "image"
         # Manuel : fichier source encore en attente (pas consommé après échec total).
         src = record.get("source_filename")
         if src:
@@ -972,6 +989,11 @@ class PublicationService:
             pending = pending_dir(self.config) / src
             if pending.is_file():
                 return pending, "video"
+            # Partiel (ex. YT ok / FB timeout) : la source est consommée mais le
+            # short construit est conservé (voir publish_manual) → on le reprend.
+            candidate = videos_dir / f"short_{Path(src).stem}.mp4"
+            if candidate.is_file():
+                return candidate, "video"
         return None, "none"
 
     def republish_facebook(
