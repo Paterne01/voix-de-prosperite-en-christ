@@ -165,21 +165,15 @@ class FacebookReelsPublisher(BasePublisher):
         start.raise_for_status()
         video_id = start.json()["video_id"]
 
-        # 2. Envoi du fichier vidéo (upload direct, adapté aux vidéos courtes
-        #    — pas besoin de découpage par blocs à cette taille)
+        # 2. Envoi par MORCEAUX de 8 Mo (resumable) : un seul POST bloquait
+        #    120 s et timeoutait sur les connexions lentes (« Connection
+        #    aborted / write timed out », manuel 04:00 du 12/09). Chaque morceau
+        #    a son propre timeout + 3 essais ; ~220 kbps suffisent par morceau.
         upload_url = f"https://rupload.facebook.com/video-upload/{self.api_version}/{video_id}"
-        with video_path.open("rb") as handle:
-            transfer = requests.post(
-                upload_url,
-                headers={
-                    "Authorization": f"OAuth {self.token}",
-                    "offset": "0",
-                    "file_size": str(video_path.stat().st_size),
-                },
-                data=handle.read(),
-                timeout=120,
-            )
-        transfer.raise_for_status()
+        _transfer_chunked(
+            upload_url, self.token, video_path,
+            logger=self.logger, chunk_size=8 * 1024 * 1024,
+        )
 
         # 3. Publication du Reel une fois l'upload terminé
         finish = requests.post(
@@ -242,3 +236,51 @@ class FacebookReelsPublisher(BasePublisher):
         # Toujours tagger @followers/@topfans même si le commentaire principal a échoué
         self._post_followers_tag(post_id)
         return comment_url
+
+
+def _transfer_chunked(upload_url: str, token: str, video_path: Path, *,
+                      logger, chunk_size: int = 8 * 1024 * 1024,
+                      per_chunk_timeout: int = 300, chunk_retries: int = 3) -> None:
+    """Upload resumable par morceaux (protocole rupload `offset`).
+
+    Envoie le fichier séquentiellement ; chaque morceau porte l'offset déjà
+    transmis, le serveur concatène. Un morceau échoué est renvoyé (backoff),
+    on n'abandonne qu'après `chunk_retries` échecs sur le MÊME morceau.
+    ~220 kbps suffisent par morceau (connexions lentes OK).
+    """
+    import time as _time
+
+    size = video_path.stat().st_size
+    offset = 0
+    with video_path.open("rb") as handle:
+        while offset < size:
+            handle.seek(offset)
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
+            for attempt in range(chunk_retries):
+                try:
+                    resp = requests.post(
+                        upload_url,
+                        headers={
+                            "Authorization": f"OAuth {token}",
+                            "offset": str(offset),
+                            "file_size": str(size),
+                        },
+                        data=chunk,
+                        timeout=per_chunk_timeout,
+                    )
+                    resp.raise_for_status()
+                    break
+                except requests.RequestException as exc:
+                    if attempt == chunk_retries - 1:
+                        raise RuntimeError(
+                            f"Morceau {offset}-{offset + len(chunk)}/{size} refusé "
+                            f"après {chunk_retries} essais : {exc}"
+                        ) from exc
+                    logger.warning(
+                        "Morceau %s/%s échoué (%s/%s), nouvel essai",
+                        offset, size, attempt + 1, chunk_retries,
+                    )
+                    _time.sleep(2 ** attempt)
+            offset += len(chunk)
